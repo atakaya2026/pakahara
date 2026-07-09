@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>पाकाहारा PC Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  body {
+    background: url('images/windows.png') no-repeat center center fixed;
+    background-size: cover;
+    font-family: 'Noto Sans Devanagari', 'Segoe UI', sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    height: 100vh; margin: 0; overflow: hidden;
+  }
+  #notepad-container {
+    width: 85%; max-width: 950px; margin-top: 60px;
+    background: #fff; box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    border-radius: 5px; overflow: hidden;
+  }
+  .title-bar {
+    background: #4a86e8; color: white; padding: 8px 15px;
+    font-size: 14px; display: flex; justify-content: space-between;
+  }
+  #editor {
+    height: 380px; padding: 25px; font-size: 38px; border: none; outline: none;
+    white-space: pre-wrap; overflow-y: auto; box-sizing: border-box;
+    position: relative; font-family: 'Noto Sans Devanagari', sans-serif;
+  }
+  #editor::after {
+    content: "|";
+    display: inline-block;
+    color: #000;
+    width: 2px;
+    margin-left: 2px;
+    animation: blink 1s step-end infinite;
+    font-weight: 100;
+  }
+  @keyframes blink {
+    from, to { color: transparent; }
+    50% { color: black; }
+  }
+
+  .kbd-area {
+    margin-top: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  .baby-guide-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    padding: 0;
+    backdrop-filter: none;
+    border: none;
+    position: relative;
+  }
+  .challenge-btn {
+    flex-shrink: 0;
+    padding: 14px 18px;
+    background: #f59e0b;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    font-size: 0.95em;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    white-space: nowrap;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .challenge-btn:hover { background: #d97706; }
+  .keyboard-pc {
+    transform: scale(0.48);
+    transform-origin: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 850px;
+    margin-left: -200px;
+    margin-top: -70px;
+    align-self: flex-start;
+  }
+  .kb-row { display: flex; gap: 8px; width: 100%; }
+  #row2 { padding-left: 35px; }
+  #row3 { padding-left: 75px; }
+
+  .key {
+    width: 65px; height: 65px; background: #fff; border-radius: 8px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    font-size: 24px; font-weight: 800; box-shadow: 0 4px 0 #888;
+    color: #333; position: relative;
+    font-family: 'Noto Sans Devanagari', sans-serif;
+  }
+  /* 중앙 간격을 위한 투명한 칸 */
+  .spacer { width: 40px; height: 65px; }
+
+  /* 모음·부호(다음키 포함) 존은 파란색으로 자음 존과 구분 */
+  .key.blue-zone {
+    background-color: #e0f2fe !important;
+    border: 1px solid #bae6fd;
+  }
+  .key.multi {
+    font-size: 22px !important; font-weight: 900;
+    white-space: nowrap;
+  }
+  .key.active { transform: translateY(4px); box-shadow: none; background: #eef2ff !important; }
+
+  .key.next-key { color: #78350f; font-weight: 900; font-size: 26px; }
+  .key.next-key.active-group { background-color: #d1fae5 !important; border: 1px solid #16a34a; color: #16a34a; }
+  .key.next-key.independent { background-color: #dbeafe !important; border: 1px solid #1a6bb8; color: #1a6bb8; }
+  .key.sign-color { color: #1a5228; font-weight: 700; font-size: 26px; }
+  .key.sign-color.independent { color: #1a6bb8; }
+
+  .key .main-char { font-size: 32px; font-weight: 900; line-height: 1; font-family: 'Noto Sans Devanagari', sans-serif; }
+  .key .sub-chars { font-size: 18px; color: #555; line-height: 1; font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 700; }
+
+  .baby-label {
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    position: absolute;
+    right: 45px;
+    top: 58%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<button onclick="location.href='index.html'"
+        style="position: fixed; top: 20px; right: 78px;
+               padding: 10px 18px; font-size: 1.1em;
+               background-color: #3f6fb8; color: #fff;
+               border: none; border-radius: 8px; cursor: pointer;
+               box-shadow: 0 2px 6px rgba(0,0,0,0.15); z-index: 9999;">
+  Home
+</button>
+
+<button onclick="resetEditor()"
+        style="position: fixed; top: 20px; right: 300px;
+               padding: 10px 18px; font-size: 1.1em;
+               background-color: #6b7280; color: #fff;
+               border: none; border-radius: 8px; cursor: pointer;
+               box-shadow: 0 2px 6px rgba(0,0,0,0.15); z-index: 9999;
+               font-family: 'Noto Sans Devanagari', sans-serif;">
+  ↺ रीसेट
+</button>
+
+<div id="notepad-container">
+  <div class="title-bar"><span>Note</span><span>✕</span></div>
+  <div id="editor" contenteditable="false"></div>
+</div>
+
+<div class="kbd-area">
+  <div class="baby-guide-container">
+    <div class="keyboard-pc" id="kbd">
+      <div class="kb-row" id="row1"></div>
+      <div class="kb-row" id="row2"></div>
+      <div class="kb-row" id="row3"></div>
+    </div>
+    <div class="baby-label">पाकाहारा Guide Map 1.0</div>
+  </div>
+  <button class="challenge-btn" onclick="location.href='challenge.html'">
+    🏆 बिना देखे<br>टाइप करें!
+  </button>
+</div>
+
+<script>
+// ── 자음 그룹: 대표 자음 입력 직후 다음키를 누르면 그룹 내에서 순차 전환 ──
+const consonantGroups = {
+  'क': ['क','ख'],
+  'ग': ['ग','घ','ङ'],
+  'च': ['च','छ'],
+  'ज': ['ज','झ','ञ'],
+  'ट': ['ट','ठ'],
+  'ड': ['ड','ढ','ण'],
+  'त': ['त','थ'],
+  'द': ['द','ध'],
+  'न': ['न','?','!'],
+  'प': ['प','फ'],
+  'ब': ['ब','भ'],
+  'म': ['म','ॐ','₹'],
+  'र': ['र','ल'],
+  'ह': ['ह','य','व'],
+  'स': ['स','श','ष'],
+};
+
+// ── 레이아웃 정의 (물리 QWERTY 키 기준) ────────────────────
+// 열 번호(1~10)는 실제 물리 키 위치 기준. 1,5,6,10열=흰색 / 2~4,7~9열=하늘색
+// Row1: Q W E R T(자음5,1~5열) [gap] Y(빈칸,6열) U I O(모음3,7~9열) P(빈칸,10열)
+// Row2: A S D F G(자음5,1~5열) [gap] H(빈칸,6열) J K(다음키) L(모음,7~9열) — ;열은 삭제
+// Row3: Z X C V B(자음5,1~5열) [gap] N(6열) M(7열) — 쉼표·마침표열은 삭제
+const rowDefs = [
+  [
+    { key:'q', col:1, type:'consonant', root:'ब' },
+    { key:'w', col:2, type:'consonant', root:'द' },
+    { key:'e', col:3, type:'consonant', root:'स' },
+    { key:'r', col:4, type:'consonant', root:'न' },
+    { key:'t', col:5, type:'consonant', root:'च' },
+    { key:'_sp1', type:'spacer' },
+    { key:'y', col:6, type:'empty' },
+    { key:'u', col:7, type:'sign', chars:['ं','ँ'], id:'r0c0' },
+    { key:'i', col:8, type:'sign', chars:['े','ै'], indep:['ए','ऐ'], id:'r0c1' },
+    { key:'o', col:9, type:'sign', chars:['ो','ौ'], indep:['ओ','औ'], id:'r0c2' },
+    { key:'p', col:10, type:'empty' },
+  ],
+  [
+    { key:'a', col:1, type:'consonant', root:'प' },
+    { key:'s', col:2, type:'consonant', root:'क' },
+    { key:'d', col:3, type:'consonant', root:'ह' },
+    { key:'f', col:4, type:'consonant', root:'र' },
+    { key:'g', col:5, type:'consonant', root:'ड' },
+    { key:'_sp2', type:'spacer' },
+    { key:'h', col:6, type:'empty' },
+    { key:'j', col:7, type:'sign', chars:['ि'], indep:['इ'], id:'r1c0' },
+    { key:'k', col:8, type:'next' },
+    { key:'l', col:9, type:'sign', chars:['ा','ी','ः'], indep:['आ','ई'], id:'r1c2' },
+  ],
+  [
+    { key:'z', col:1, type:'consonant', root:'ग' },
+    { key:'x', col:2, type:'consonant', root:'ज' },
+    { key:'c', col:3, type:'consonant', root:'त' },
+    { key:'v', col:4, type:'consonant', root:'म' },
+    { key:'b', col:5, type:'consonant', root:'ट' },
+    { key:'_sp3', type:'spacer' },
+    { key:'n', col:6, type:'sign', chars:['्','़'], id:'r2c0' },
+    { key:'m', col:7, type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'], id:'r2c1' },
+  ],
+];
+
+const keyLookup = {};
+rowDefs.forEach(row => row.forEach(def => { keyLookup[def.key] = def; }));
+
+// 열 번호 기준 색상: 2~4, 7~9열은 하늘색, 나머지(1,5,6,10)는 흰색
+const blueCols = new Set([2,3,4,7,8,9]);
+
+let state = {
+  activeRoot: null, activeCharIdx: 0,
+  lastSignKey: null, signTapIdx: 0,
+  signIndepMode: false, independentMode: false,
+};
+
+const editor = document.getElementById('editor');
+const getText = () => editor.innerText;
+const setText = t => { editor.innerText = t; };
+const appendText = c => setText(getText() + c);
+const replaceLastChar = c => { const t = getText(); if (!t.length) return; setText(t.slice(0,-1)+c); };
+const doBackspace = () => { const t = getText(); if (!t.length) return; setText(t.slice(0,-1)); };
+
+function getRootOf(char) {
+  for (const [root, arr] of Object.entries(consonantGroups)) if (arr.includes(char)) return root;
+  return null;
+}
+
+// 독립모음 모드는 오직 스페이스바를 눌렀을 때만 진입한다
+function independentActive() {
+  if (state.independentMode) return true;
+  return getText().endsWith(' ');
+}
+
+function handleConsonant(root) {
+  appendText(root);
+  state.activeRoot = root; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  updateKbdUI();
+}
+
+function handleNext() {
+  if (independentActive()) {
+    if (state.lastSignKey === 'K' && state.signIndepMode) { return; } // 'अ' 하나뿐, 재입력 없음
+    const t = getText();
+    if (t.endsWith(' ')) setText(t.slice(0, -1));
+    appendText('अ');
+    state.independentMode = true;
+    state.lastSignKey = 'K'; state.signTapIdx = 0; state.signIndepMode = true;
+    state.activeRoot = null; state.activeCharIdx = 0;
+    updateKbdUI(); return;
+  }
+  if (!state.activeRoot) return;
+  const arr = consonantGroups[state.activeRoot];
+  const nextIdx = (state.activeCharIdx + 1) % arr.length;
+  replaceLastChar(arr[nextIdx]);
+  state.activeCharIdx = nextIdx;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  updateKbdUI();
+}
+
+function handleVowelKey(def) {
+  const isIndep = independentActive();
+  const chars = isIndep ? (def.indep || def.chars) : def.chars;
+
+  if (state.lastSignKey === def.id && state.signIndepMode === isIndep) {
+    state.signTapIdx = (state.signTapIdx + 1) % chars.length;
+    setText(getText().slice(0, -1) + chars[state.signTapIdx]);
+  } else {
+    if (isIndep) {
+      const t = getText();
+      if (t.endsWith(' ')) setText(t.slice(0, -1));
+      appendText(chars[0]);
+      state.independentMode = true;
+    } else {
+      appendText(chars[0]);
+    }
+    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = isIndep;
+  }
+  state.activeRoot = null; state.activeCharIdx = 0;
+  updateKbdUI();
+}
+
+function handleBS() {
+  doBackspace();
+  state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
+  const t = getText();
+  const last = t.length ? t[t.length - 1] : null;
+  const root = last ? getRootOf(last) : null;
+  state.activeRoot = root;
+  state.activeCharIdx = root ? consonantGroups[root].indexOf(last) : 0;
+  updateKbdUI();
+}
+
+function handleSpace() {
+  appendText(' ');
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  updateKbdUI();
+}
+
+function handleEnter() {
+  appendText('\n');
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  updateKbdUI();
+}
+
+// 결합기호(마트라 등) 단독 표시 시 점선원을 붙여준다
+function isDiacritic(c) {
+  const cp = c.codePointAt(0);
+  return (cp >= 0x0900 && cp <= 0x0903) || cp === 0x093C || (cp >= 0x093E && cp <= 0x094D);
+}
+
+// ── 키보드 이벤트 ──────────────────────────────────────────
+const ignoredKeys = new Set(['shift','control','alt','meta','capslock','tab','escape',
+  'arrowleft','arrowright','arrowup','arrowdown',
+  'f1','f2','f3','f4','f6','f7','f8','f9','f10','f11']);
+
+window.addEventListener('keydown', (e) => {
+  const raw = e.key;
+  const k   = raw === ' ' ? ' ' : raw.toLowerCase();
+  if (ignoredKeys.has(k)) return;
+  if (k !== 'f5' && k !== 'f12') e.preventDefault();
+
+  const el = document.getElementById(`key-${k}`);
+  if (el) el.classList.add('active');
+
+  if (k === 'backspace') { handleBS(); editor.scrollTop = editor.scrollHeight; return; }
+  if (k === 'enter')     { handleEnter(); editor.scrollTop = editor.scrollHeight; return; }
+  if (k === ' ')         { handleSpace(); editor.scrollTop = editor.scrollHeight; return; }
+
+  const def = keyLookup[k];
+  if (!def || def.type === 'empty') return;
+
+  if      (def.type === 'consonant') handleConsonant(def.root);
+  else if (def.type === 'next')      handleNext();
+  else if (def.type === 'sign')      handleVowelKey(def);
+
+  editor.scrollTop = editor.scrollHeight;
+});
+
+window.addEventListener('keyup', (e) => {
+  const k = e.key === ' ' ? ' ' : e.key.toLowerCase();
+  const el = document.getElementById(`key-${k}`);
+  if (el) el.classList.remove('active');
+});
+
+// ── 키보드 UI 초기화 ───────────────────────────────────────
+function initKbd() {
+  rowDefs.forEach((row, ri) => {
+    const rowEl = document.getElementById(`row${ri + 1}`);
+    row.forEach((def) => {
+      const div = document.createElement('div');
+      div.className = 'key';
+      div.id = `key-${def.key}`;
+
+      if (blueCols.has(def.col)) div.classList.add('blue-zone');
+
+      if (def.type === 'consonant') {
+        const arr = consonantGroups[def.root];
+        const main = document.createElement('span');
+        main.className = 'main-char';
+        main.textContent = arr[0];
+        div.appendChild(main);
+        if (arr.length > 1) {
+          const sub = document.createElement('span');
+          sub.className = 'sub-chars';
+          sub.textContent = arr.slice(1).join('');
+          div.appendChild(sub);
+        }
+
+      } else if (def.type === 'sign') {
+        div.classList.add('multi', 'sign-color');
+
+      } else if (def.type === 'next') {
+        div.classList.add('next-key');
+
+      } else if (def.type === 'spacer') {
+        div.className = 'spacer';
+        div.removeAttribute('id');
+      }
+
+      rowEl.appendChild(div);
+    });
+  });
+
+  updateKbdUI();
+}
+
+function updateKbdUI() {
+  const isIndep = independentActive();
+
+  // 다음키
+  const nextEl = document.getElementById('key-k');
+  if (nextEl) {
+    nextEl.classList.toggle('independent', isIndep);
+    nextEl.classList.toggle('active-group', !isIndep && !!state.activeRoot);
+    if (isIndep) {
+      nextEl.textContent = 'अ';
+    } else if (state.activeRoot) {
+      nextEl.textContent = consonantGroups[state.activeRoot].slice(1).join(' ');
+    } else {
+      nextEl.textContent = '➤';
+    }
+  }
+
+  // 모음·부호 키: 독립모음 모드면 표시 문자셋 전환
+  rowDefs.forEach(row => row.forEach(def => {
+    if (def.type !== 'sign') return;
+    const el = document.getElementById(`key-${def.key}`);
+    if (!el) return;
+    const chars = isIndep ? (def.indep || def.chars) : def.chars;
+    el.classList.toggle('independent', isIndep && !!def.indep);
+    el.textContent = chars.map(c => isDiacritic(c) ? '◌'+c : c).join(' ');
+  }));
+}
+
+function resetEditor() {
+  setText('');
+  state = { activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false };
+  updateKbdUI();
+}
+
+initKbd();
+</script>
+</body>
+</html>

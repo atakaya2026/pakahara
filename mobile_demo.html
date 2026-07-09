@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; background: #6b7280;
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+  }
+  #phone-wrap {
+    width: min(100%, 480px);
+    height: 100%;
+    max-height: 900px;
+    display: flex;
+    flex-direction: column;
+    background: #e8e4dc;
+    box-shadow: 0 -5px 40px rgba(0,0,0,0.5);
+    border-radius: 12px 12px 0 0;
+    position: relative;
+    overflow: hidden;
+  }
+  #action-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: #1a3a2a; border-bottom: 2px solid #4caf80;
+  }
+  #action-bar .title { color: #4caf80; font-size: 15px; font-weight: bold; letter-spacing: 1px; }
+  .action-btn { padding: 5px 12px; border-radius: 6px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .action-btn.reset { background: #6b7280; color: #fff; }
+
+  #editor {
+    flex: 1; width: 100%; background: #faf7f2;
+    padding: 16px 20px; font-size: 30px; line-height: 1.9;
+    border: none; outline: none; overflow-y: auto;
+    white-space: pre-wrap; color: #1a1208; overflow-wrap: break-word;
+  }
+  .cursor { color: #4caf80; animation: blink 1s step-end infinite; font-weight: 100; }
+  @keyframes blink { from, to { opacity: 0; } 50% { opacity: 1; } }
+
+  #keyboard-wrap {
+    position: relative;
+    width: 100%;
+    flex-shrink: 0;
+    border-top: 1px solid #888;
+    background: #b5b0a8;
+  }
+  #kbd-image { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+  #kbd { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+
+  .kbd-btn {
+    position: absolute;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    font-weight: bold;
+    padding: 0;
+  }
+  .kbd-btn:active { opacity: 0.5; }
+
+  /* 자음키/백스페이스/123/스페이스/엔터: 이미지에 이미 라벨이 그려져 있어 텍스트 없음 */
+  .kbd-cons, .kbd-bs, .kbd-123, .kbd-space, .kbd-enter { font-size: 0; }
+
+  /* 모음·부호키 + 다음키: 이미지가 공란이라 JS가 라벨을 그려 넣음 */
+  .kbd-label {
+    flex-direction: row; flex-wrap: nowrap;
+    justify-content: center; align-items: center;
+    gap: 0 3px; line-height: 1;
+    color: #3a6b1f; font-weight: 700;
+    overflow: hidden;
+  }
+  .kbd-label .label-item { line-height: 1; white-space: nowrap; }
+  .kbd-label.count-1 .label-item,
+  .kbd-label.count-2 .label-item { font-size: clamp(11px, 4.2vw, 19px); }
+  .kbd-label.count-3 .label-item { font-size: clamp(8px, 3.0vw, 14px); }
+  .kbd-label.next-idle .label-item { color: #1a1208; font-weight: 900; transform: translateY(0.12em); }
+
+  /* 다음키(K): 자판에서 가장 중요한 키라 항상 더 크게 (최대 2글자만 표시되므로 여유 있음) */
+  .kbd-label.kbd-next.count-1 .label-item,
+  .kbd-label.kbd-next.count-2 .label-item { font-size: clamp(15px, 5.6vw, 25px); }
+  .kbd-label.kbd-next.next-idle.count-1 .label-item { font-size: clamp(13px, 4.6vw, 20px); }
+  .kbd-label.kbd-next { gap: 0 1px; }
+  .kbd-label.independent .label-item { color: #1a6bb8; }
+  .kbd-label.next-active { color: #16a34a; }
+
+</style>
+</head>
+<body>
+<div id="phone-wrap">
+<div id="action-bar">
+  <span class="title">पाकाहारा</span>
+  <button class="action-btn reset" onclick="resetAll()">↺ रीसेट</button>
+</div>
+<div id="editor"></div>
+<div id="keyboard-wrap">
+  <img id="kbd-image" src="images/keyboard.png" alt="keyboard" draggable="false" />
+  <div id="kbd"></div>
+</div>
+</div>
+
+<script>
+// ── 자음 그룹: 대표 자음 입력 직후 다음키(K)를 누르면 그룹 내에서 순차 전환 ──
+const consonantGroups = {
+  'क': ['क','ख'],
+  'ग': ['ग','घ','ङ'],
+  'च': ['च','छ'],
+  'ज': ['ज','झ','ञ'],
+  'ट': ['ट','ठ'],
+  'ड': ['ड','ढ','ण'],
+  'त': ['त','थ'],
+  'द': ['द','ध'],
+  'न': ['न','?','!'],
+  'प': ['प','फ'],
+  'ब': ['ब','भ'],
+  'म': ['म','ॐ','₹'],
+  'र': ['र','ल'],
+  'ह': ['ह','य','व'],
+  'स': ['स','श','ष'],
+};
+
+const leftKeys = [
+  ['ब','द','स','न','च'],
+  ['प','क','ह','र','ड'],
+  ['ग','ज','त','म','ट'],
+];
+
+// 다음키(K, 홈로우 우측 중지 위치)를 중심으로 상/하/좌/우/대각선에 배치되는 모음·부호키
+// indep: 독립모음 모드일 때 대체 표시/입력되는 문자 (없으면 chars 그대로 유지)
+const rightKeys = [
+  [
+    { id:'U', type:'sign', chars:['ं','ँ'] },
+    { id:'I', type:'sign', chars:['े','ै'], indep:['ए','ऐ'] },
+    { id:'O', type:'sign', chars:['ो','ौ'], indep:['ओ','औ'] },
+  ],
+  [
+    { id:'J', type:'sign', chars:['ि'], indep:['इ'] },
+    { id:'K', type:'next' },
+    { id:'L', type:'sign', chars:['ा','ी','ः'], indep:['आ','ई'] },
+  ],
+  [
+    { id:'N', type:'sign', chars:['्','़'] },
+    { id:'M', type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'] },
+    { id:'BS', type:'bs' },
+  ],
+];
+
+let state = {
+  activeRoot: null,
+  activeCharIdx: 0,
+  lastSignKey: null,
+  signTapIdx: 0,
+  signIndepMode: false,
+  independentMode: false,
+};
+
+const editor = document.getElementById('editor');
+function getText() { return editor.dataset.text || ''; }
+function setText(t) {
+  editor.dataset.text = t;
+  const esc = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  editor.innerHTML = esc + `<span class="cursor">|</span>`;
+}
+function appendText(c) { setText(getText() + c); }
+function replaceLastChar(c) { const t=getText(); if(!t.length)return; setText(t.slice(0,-1)+c); }
+function backspace() { const t=getText(); if(!t.length)return; setText(t.slice(0,-1)); }
+
+function getRootOf(char) {
+  for (const [root, arr] of Object.entries(consonantGroups)) if (arr.includes(char)) return root;
+  return null;
+}
+
+// 독립모음 모드는 오직 스페이스바를 눌렀을 때만 진입한다
+function independentActive() {
+  if (state.independentMode) return true;
+  return getText().endsWith(' ');
+}
+
+function handleConsonant(root) {
+  appendText(root);
+  state.activeRoot = root; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  render();
+}
+
+function handleNext() {
+  if (independentActive()) {
+    if (state.lastSignKey === 'K' && state.signIndepMode) { return; } // 'अ' 하나뿐, 재입력 없음
+    const t = getText();
+    if (t.endsWith(' ')) setText(t.slice(0, -1));
+    appendText('अ');
+    state.independentMode = true;
+    state.lastSignKey = 'K'; state.signTapIdx = 0; state.signIndepMode = true;
+    state.activeRoot = null; state.activeCharIdx = 0;
+    render(); return;
+  }
+  if (!state.activeRoot) return;
+  const arr = consonantGroups[state.activeRoot];
+  const nextIdx = (state.activeCharIdx + 1) % arr.length;
+  replaceLastChar(arr[nextIdx]);
+  state.activeCharIdx = nextIdx;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  render();
+}
+
+function handleVowelKey(def) {
+  const isIndep = independentActive();
+  const chars = isIndep ? (def.indep || def.chars) : def.chars;
+
+  if (state.lastSignKey === def.id && state.signIndepMode === isIndep) {
+    state.signTapIdx = (state.signTapIdx + 1) % chars.length;
+    const t = getText(); setText(t.slice(0, -1) + chars[state.signTapIdx]);
+  } else {
+    if (isIndep) {
+      const t = getText();
+      if (t.endsWith(' ')) setText(t.slice(0, -1));
+      appendText(chars[0]);
+      state.independentMode = true;
+    } else {
+      appendText(chars[0]);
+    }
+    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = isIndep;
+  }
+  state.activeRoot = null; state.activeCharIdx = 0;
+  render();
+}
+
+function handleBS() {
+  backspace();
+  state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
+  const t = getText();
+  const last = t.length ? t[t.length - 1] : null;
+  const root = last ? getRootOf(last) : null;
+  state.activeRoot = root;
+  state.activeCharIdx = root ? consonantGroups[root].indexOf(last) : 0;
+  render();
+}
+
+function handleSpace() {
+  appendText(' ');
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  render();
+}
+
+function handleEnter() {
+  appendText('\n');
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  render();
+}
+
+// ── 좌표 (이미지 1421×778 픽셀 실측 기준 %) ──────────────────────────────
+const KEY_COLS = [1.55, 14.00, 26.39, 38.78, 51.16, 63.62, 76.14, 88.60];
+const KEY_ROWS = [3.09, 27.89, 52.44];
+const KEY_W = 9.53, KEY_H = 19.97;
+const BOT_Y = 77.12, BOT_H = 19.92;
+const BOT_SECTIONS = { num:[0.92,26.04], space:[26.04,73.82], enter:[73.82,98.94] };
+
+function makeBtn(cls, style, onClick) {
+  const b = document.createElement('button');
+  b.className = 'kbd-btn ' + cls;
+  Object.assign(b.style, style);
+  if (onClick) b.addEventListener('pointerdown', (e) => { e.preventDefault(); onClick(); });
+  return b;
+}
+
+function render() {
+  const kbd = document.getElementById('kbd');
+  kbd.innerHTML = '';
+  const isIndep = independentActive();
+
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 5; col++) {
+      const root = leftKeys[row][col];
+      kbd.appendChild(makeBtn('kbd-cons', {
+        left: KEY_COLS[col] + '%', top: KEY_ROWS[row] + '%', width: KEY_W + '%', height: KEY_H + '%'
+      }, () => handleConsonant(root)));
+    }
+
+    for (let col = 0; col < 3; col++) {
+      const rk = rightKeys[row][col];
+      const imgCol = col + 5;
+      const style = { left: KEY_COLS[imgCol] + '%', top: KEY_ROWS[row] + '%', width: KEY_W + '%', height: KEY_H + '%' };
+
+      if (rk.type === 'next') {
+        let labels = [];
+        let extraCls = ' kbd-next';
+        if (isIndep) { labels = ['अ']; extraCls += ' independent'; }
+        else if (state.activeRoot) { labels = consonantGroups[state.activeRoot].slice(1); extraCls += ' next-active'; }
+        else { labels = ['➤']; extraCls += ' next-idle'; }
+        if (labels.length) extraCls += ' count-' + labels.length;
+        const b = makeBtn('kbd-label' + extraCls, style, handleNext);
+        labels.forEach(ch => {
+          const sp = document.createElement('span');
+          sp.className = 'label-item'; sp.textContent = ch;
+          b.appendChild(sp);
+        });
+        kbd.appendChild(b);
+
+      } else if (rk.type === 'bs') {
+        kbd.appendChild(makeBtn('kbd-bs', style, handleBS));
+
+      } else if (rk.type === 'sign') {
+        const chars = isIndep ? (rk.indep || rk.chars) : rk.chars;
+        const cls = 'kbd-label count-' + chars.length + (isIndep && rk.indep ? ' independent' : '');
+        const b = makeBtn(cls, style, () => handleVowelKey(rk));
+        chars.forEach(ch => {
+          const sp = document.createElement('span');
+          sp.className = 'label-item'; sp.textContent = ch;
+          b.appendChild(sp);
+        });
+        kbd.appendChild(b);
+      }
+    }
+  }
+
+  // 하단바: 123 | 스페이스/스와 | 엔터
+  const [n0, n1] = BOT_SECTIONS.num;
+  kbd.appendChild(makeBtn('kbd-123', {
+    left: n0 + '%', top: BOT_Y + '%', width: (n1 - n0) + '%', height: BOT_H + '%'
+  }, () => { /* 숫자판은 데모 범위 밖: 추후 연결 */ }));
+
+  const [s0, s1] = BOT_SECTIONS.space;
+  kbd.appendChild(makeBtn('kbd-space', {
+    left: s0 + '%', top: BOT_Y + '%', width: (s1 - s0) + '%', height: BOT_H + '%'
+  }, handleSpace));
+
+  const [e0, e1] = BOT_SECTIONS.enter;
+  kbd.appendChild(makeBtn('kbd-enter', {
+    left: e0 + '%', top: BOT_Y + '%', width: (e1 - e0) + '%', height: BOT_H + '%'
+  }, handleEnter));
+}
+
+function resetAll() {
+  setText('');
+  state = { activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false };
+  render();
+}
+
+setText('');
+render();
+</script>
+</body>
+</html>

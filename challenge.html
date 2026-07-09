@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>पाकाहारा · बिना देखे टाइप करें</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  body {
+    background: url('images/windows.png') no-repeat center center fixed;
+    background-size: cover;
+    font-family: 'Noto Sans Devanagari', 'Segoe UI', sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    height: 100vh; margin: 0; overflow: hidden;
+  }
+  #notepad-container {
+    width: 85%; max-width: 950px; margin-top: 60px;
+    background: #fff; box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    border-radius: 5px; overflow: hidden;
+  }
+  .title-bar {
+    background: #4a86e8; color: white; padding: 8px 15px;
+    font-size: 14px; display: flex; justify-content: space-between; align-items: center;
+  }
+  #editor {
+    height: 480px; padding: 25px; font-size: 38px; border: none; outline: none;
+    white-space: pre-wrap; overflow-y: auto; box-sizing: border-box;
+    font-family: 'Noto Sans Devanagari', sans-serif; color: #1a1208; line-height: 1.4;
+  }
+  #editor::after {
+    content: "|"; display: inline-block;
+    width: 2px; margin-left: 2px;
+    animation: blink 1s step-end infinite; font-weight: 100;
+  }
+  @keyframes blink { from, to { color: transparent; } 50% { color: black; } }
+
+  .top-btn {
+    position: fixed; top: 20px;
+    padding: 10px 18px; font-size: 1.05em;
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    font-weight: 600; color: #fff; border: none; border-radius: 8px;
+    cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+<button class="top-btn" style="right:78px; background:#3f6fb8;"
+  onclick="location.href='index.html'">Home</button>
+
+<button class="top-btn" style="right:300px; background:#6b7280;"
+  onclick="resetEditor()">↺ रीसेट</button>
+
+<button class="top-btn" style="right:440px; background:#4a86e8;"
+  onclick="location.href='pc_demo_windows.html'">← गाइड दिखाएं</button>
+
+<div id="notepad-container">
+  <div class="title-bar">
+    <span>🏆 बिना देखे टाइप करें – पाकाहारा</span>
+    <span>✕</span>
+  </div>
+  <div id="editor" contenteditable="false"></div>
+</div>
+
+<script>
+// ── 자음 그룹: 대표 자음 입력 직후 다음키를 누르면 그룹 내에서 순차 전환 ──
+const consonantGroups = {
+  'क': ['क','ख'],
+  'ग': ['ग','घ','ङ'],
+  'च': ['च','छ'],
+  'ज': ['ज','झ','ञ'],
+  'ट': ['ट','ठ'],
+  'ड': ['ड','ढ','ण'],
+  'त': ['त','थ'],
+  'द': ['द','ध'],
+  'न': ['न','?','!'],
+  'प': ['प','फ'],
+  'ब': ['ब','भ'],
+  'म': ['म','ॐ','₹'],
+  'र': ['र','ल'],
+  'ह': ['ह','य','व'],
+  'स': ['स','श','ष'],
+};
+
+// ── 물리 QWERTY 키 매핑 (pc_demo_devanagari.html과 동일) ──
+const rowDefs = [
+  [
+    { key:'q', col:1, type:'consonant', root:'ब' },
+    { key:'w', col:2, type:'consonant', root:'द' },
+    { key:'e', col:3, type:'consonant', root:'स' },
+    { key:'r', col:4, type:'consonant', root:'न' },
+    { key:'t', col:5, type:'consonant', root:'च' },
+    { key:'y', col:6, type:'empty' },
+    { key:'u', col:7, type:'sign', chars:['ं','ँ'], id:'r0c0' },
+    { key:'i', col:8, type:'sign', chars:['े','ै'], indep:['ए','ऐ'], id:'r0c1' },
+    { key:'o', col:9, type:'sign', chars:['ो','ौ'], indep:['ओ','औ'], id:'r0c2' },
+    { key:'p', col:10, type:'empty' },
+  ],
+  [
+    { key:'a', col:1, type:'consonant', root:'प' },
+    { key:'s', col:2, type:'consonant', root:'क' },
+    { key:'d', col:3, type:'consonant', root:'ह' },
+    { key:'f', col:4, type:'consonant', root:'र' },
+    { key:'g', col:5, type:'consonant', root:'ड' },
+    { key:'h', col:6, type:'empty' },
+    { key:'j', col:7, type:'sign', chars:['ि'], indep:['इ'], id:'r1c0' },
+    { key:'k', col:8, type:'next' },
+    { key:'l', col:9, type:'sign', chars:['ा','ी','ः'], indep:['आ','ई'], id:'r1c2' },
+  ],
+  [
+    { key:'z', col:1, type:'consonant', root:'ग' },
+    { key:'x', col:2, type:'consonant', root:'ज' },
+    { key:'c', col:3, type:'consonant', root:'त' },
+    { key:'v', col:4, type:'consonant', root:'म' },
+    { key:'b', col:5, type:'consonant', root:'ट' },
+    { key:'n', col:6, type:'sign', chars:['्','़'], id:'r2c0' },
+    { key:'m', col:7, type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'], id:'r2c1' },
+  ],
+];
+
+const keyLookup = {};
+rowDefs.forEach(row => row.forEach(def => { keyLookup[def.key] = def; }));
+
+let state = {
+  activeRoot: null, activeCharIdx: 0,
+  lastSignKey: null, signTapIdx: 0,
+  signIndepMode: false, independentMode: false,
+};
+
+const editor = document.getElementById('editor');
+const getText = () => editor.innerText;
+const setText = t => { editor.innerText = t; };
+const appendText = c => setText(getText() + c);
+const replaceLastChar = c => { const t = getText(); if (!t.length) return; setText(t.slice(0,-1)+c); };
+const doBackspace = () => { const t = getText(); if (!t.length) return; setText(t.slice(0,-1)); };
+
+function getRootOf(char) {
+  for (const [root, arr] of Object.entries(consonantGroups)) if (arr.includes(char)) return root;
+  return null;
+}
+
+// 독립모음 모드는 오직 스페이스바를 눌렀을 때만 진입한다
+function independentActive() {
+  if (state.independentMode) return true;
+  return getText().endsWith(' ');
+}
+
+function handleConsonant(root) {
+  appendText(root);
+  state.activeRoot = root; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+}
+
+function handleNext() {
+  if (independentActive()) {
+    if (state.lastSignKey === 'K' && state.signIndepMode) { return; }
+    const t = getText();
+    if (t.endsWith(' ')) setText(t.slice(0, -1));
+    appendText('अ');
+    state.independentMode = true;
+    state.lastSignKey = 'K'; state.signTapIdx = 0; state.signIndepMode = true;
+    state.activeRoot = null; state.activeCharIdx = 0;
+    return;
+  }
+  if (!state.activeRoot) return;
+  const arr = consonantGroups[state.activeRoot];
+  const nextIdx = (state.activeCharIdx + 1) % arr.length;
+  replaceLastChar(arr[nextIdx]);
+  state.activeCharIdx = nextIdx;
+  state.lastSignKey = null; state.signTapIdx = 0;
+}
+
+function handleVowelKey(def) {
+  const isIndep = independentActive();
+  const chars = isIndep ? (def.indep || def.chars) : def.chars;
+
+  if (state.lastSignKey === def.id && state.signIndepMode === isIndep) {
+    state.signTapIdx = (state.signTapIdx + 1) % chars.length;
+    setText(getText().slice(0, -1) + chars[state.signTapIdx]);
+  } else {
+    if (isIndep) {
+      const t = getText();
+      if (t.endsWith(' ')) setText(t.slice(0, -1));
+      appendText(chars[0]);
+      state.independentMode = true;
+    } else {
+      appendText(chars[0]);
+    }
+    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = isIndep;
+  }
+  state.activeRoot = null; state.activeCharIdx = 0;
+}
+
+function handleBS() {
+  doBackspace();
+  state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
+  const t = getText();
+  const last = t.length ? t[t.length - 1] : null;
+  const root = last ? getRootOf(last) : null;
+  state.activeRoot = root;
+  state.activeCharIdx = root ? consonantGroups[root].indexOf(last) : 0;
+}
+
+function handleSpace() {
+  appendText(' ');
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+}
+
+function handleEnter() {
+  appendText('\n');
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+}
+
+// ── 키보드 이벤트 ──────────────────────────────────────────
+const ignoredKeys = new Set(['shift','control','alt','meta','capslock','tab','escape',
+  'arrowleft','arrowright','arrowup','arrowdown',
+  'f1','f2','f3','f4','f6','f7','f8','f9','f10','f11']);
+
+window.addEventListener('keydown', (e) => {
+  const raw = e.key;
+  const k   = raw === ' ' ? ' ' : raw.toLowerCase();
+  if (ignoredKeys.has(k)) return;
+  if (k !== 'f5' && k !== 'f12') e.preventDefault();
+
+  if (k === 'backspace') { handleBS(); editor.scrollTop = editor.scrollHeight; return; }
+  if (k === 'enter')     { handleEnter(); editor.scrollTop = editor.scrollHeight; return; }
+  if (k === ' ')         { handleSpace(); editor.scrollTop = editor.scrollHeight; return; }
+
+  const def = keyLookup[k];
+  if (!def || def.type === 'empty') return;
+
+  if      (def.type === 'consonant') handleConsonant(def.root);
+  else if (def.type === 'next')      handleNext();
+  else if (def.type === 'sign')      handleVowelKey(def);
+
+  editor.scrollTop = editor.scrollHeight;
+});
+
+function resetEditor() {
+  setText('');
+  state = { activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false };
+}
+</script>
+</body>
+</html>

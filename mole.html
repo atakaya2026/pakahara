@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="lo">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Whack-a-Mole</title>
+  <style>
+    html,body{height:100%;margin:0}
+    body{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#fff;font-family:system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, Noto Sans KR, Arial, sans-serif}
+    .wrap{width:min(800px, 96vw); margin:16px auto; position:relative;}
+    #myCanvas{width:100%; height:auto; display:block; border-radius:12px; box-shadow: 0 6px 20px rgba(0,0,0,.08);}
+    .bar{display:flex;gap:12px;align-items:center; margin:10px 0;}
+    .btn{padding:8px 12px;border:1px solid #ccc;border-radius:10px;background:#fafafa;cursor:pointer}
+	.wrap {
+  width:min(800px, 96vw);
+  margin:64px auto;    /* ← 여기서 auto는 좌우, 32px은 위아래 */
+  position:relative;
+}
+
+    #tutorialOverlay, #successOverlay{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:rgba(255,255,255,.96); z-index:9999;
+    }
+    #successOverlay{ display:none; }
+	#tutorialText { white-space: pre-line; }
+
+  </style>
+</head>
+<body>
+<button onclick="location.href='index.html'" 
+        style="position: fixed; top: 20px; right: 78px; 
+               padding: 10px 18px; font-size: 1.1em; 
+               background-color: #3f6fb8; color: #fff; 
+               border: none; border-radius: 8px; cursor: pointer; 
+               box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+               z-index: 10000;">
+  Home
+</button>
+  <div class="wrap">
+    <canvas id="myCanvas" width="900" height="540"></canvas>
+  </div>
+  <script src="./script.js"></script>
+
+  <!-- Tutorial overlay (Space to advance) -->
+  <div id="tutorialOverlay">
+    <div style="display:flex; flex-direction:column; align-items:center;">
+      <div id="tutorialText" style="margin-bottom:12px; font-size:28px; font-weight:600; text-align:center; color:#333;">
+        F और J दोनों हाथों की तर्जनी उंगलियों के स्थान हैं।
+      </div>
+      <img id="tutorialImage" src="./sub/2p_main.png" alt="튜토리얼" style="max-width:min(800px,96vw); height:auto; border-radius:14px; box-shadow:0 6px 20px rgba(0,0,0,.08);" />
+      <div style="margin-top:12px; font-weight:700; font-size:28px; color:#7aa; user-select:none;">आगे (स्पेसबार)</div>
+    </div>
+  </div>
+
+  <!-- Success overlay -->
+<div id="successOverlay">
+  <div style="display:flex; flex-direction:column; align-items:center; text-align:center; font-size:24px; color:#000;">
+    <p style="margin:12px 0; font-weight:600;">बधाई हो!</p>
+    <p>अब आप केवल स्क्रीन को देखकर अपनी पसंद की कुंजियाँ टाइप कर सकते हैं।<br>
+'पुष्टि करें' बटन दबाएं और परीक्षण शुरू करें।</p>
+    <button id="goDemoBtn" style="margin-top:20px; padding:10px 20px; font-size:20px; border:none; border-radius:8px; background:#48c; color:#fff; cursor:pointer;">
+      पुष्टि करें
+    </button>
+  </div>
+</div>
+
+  <script>
+  // Tutorial pager & start
+  (function(){
+    const pages = [
+      {img:"./sub/2p_main.png", text:"F और J दोनों हाथों की तर्जनी उंगलियों के स्थान हैं।"},
+      {img:"./sub/3p_main.png", text:"उंगलियों की सही स्थिति"},
+      {img:"./sub/4p_main.png", text:"अब प्रत्येक उंगली को ऊपर और नीचे ले जाने का प्रयास करें।\nजब आप तैयार हों, तो गेम शुरू करने के लिए स्पेसबार दबाएं।"}
+    ];
+    // preload
+    pages.forEach(p=>{ const im=new Image(); im.src=p.img; });
+
+    const overlay = document.getElementById('tutorialOverlay');
+    const imgEl = document.getElementById('tutorialImage');
+    const txtEl = document.getElementById('tutorialText');
+    let i = 0;
+
+    function startGame(){
+      // unlock audio
+      try {
+        [window.snd, window.hammer, window.pong].filter(Boolean).forEach(a=>{
+          try{ a.volume=0.7; a.play().then(()=>a.pause()).catch(()=>{});}catch(_){}
+        });
+      } catch(_){}
+      overlay.style.display = 'none';
+      if (typeof showDivs==='function'){ window.slideIndex=5; showDivs(window.slideIndex); }
+      window.removeEventListener('keydown', onKey, true);
+    }
+
+    function onKey(e){
+      if (e.code!=='Space') return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (i < pages.length-1){
+        i++;
+        imgEl.src = pages[i].img;
+        txtEl.textContent = pages[i].text;
+      } else {
+        startGame();
+      }
+    }
+    window.addEventListener('keydown', onKey, true);
+  })();
+  </script>
+
+  
+  <script>
+  /* [single patch] 오른손 영역 +35px 갭 + 전체 -27px 이동 (레벨2~3 슬라이드) */
+  (function(){
+    if (window.__rightGapPatched) return;
+    window.__rightGapPatched = true;
+
+    const SHIFT_ALL = -27; // 전체 두더지 좌측 이동
+    const GAP = 35;       // 오른손 추가 간격
+    // 열 기준치(경계키 y,h,n을 확실히 포함하도록 -20 보정)
+    const TH_TOP = 175 + 70*4 - 20; // = 435
+    const TH_MID = 190 + 70*4 - 20; // = 450
+    const TH_BOT = 222 + 70*4 - 20; // = 482
+
+    function wrap(){
+      if (typeof window.drawgif !== 'function') return false;
+      const base = window.drawgif;
+      window.drawgif = function(mode, i, x, y){
+        if (window.__isFinalDone) return; // 성공 후엔 두더지 그리지 않음
+        if (window.slideIndex===5 || window.slideIndex===6 || window.slideIndex===7){
+          // 전체 이동 (rawX로 경계 판정)
+          const rawX = x;
+          x += SHIFT_ALL;
+          // 오른손 갭 (경계키 y/h/n 포함 위해 rawX 기준 판정)
+          if (y < 260 && rawX >= TH_TOP)       x += GAP; // 윗줄
+          else if (y < 340 && rawX >= TH_MID)  x += GAP; // 중간줄
+          else if (y >= 340 && rawX >= TH_BOT) x += GAP; // 아랫줄
+        }
+        return base(mode, i, x, y);
+      };
+      return true;
+    }
+    if (!wrap()){
+      // drawgif가 늦게 세팅될 경우 대비
+      let tries=0; const id=setInterval(()=>{ if (wrap()||(++tries>200)) clearInterval(id); }, 25);
+    }
+  })();
+  </script>
+
+
+  <script>
+  /* Hit limit override: advance slide after N hits per level; on final, freeze */
+  (function(){
+    const LIMITS = {5: 60, 6: 60, 7: 60}; // 레벨별 히트 제한
+    let hitCount = 0;
+    let lastSlide = null;
+    function resetIfChanged(){
+      if (typeof window.slideIndex === 'number' && window.slideIndex !== lastSlide){
+        lastSlide = window.slideIndex;
+        hitCount = 0;
+      }
+    }
+
+    // Hook pong.play()
+    function install(){
+      resetIfChanged();
+      const pong = window.pong;
+      if (!pong || typeof pong.play !== 'function') return false;
+
+      const origPlay = pong.play.bind(pong);
+      if (pong.__hooked) return true;
+      pong.__hooked = true;
+
+      pong.play = function(){
+        resetIfChanged();
+        try{
+          if (lastSlide===5 || lastSlide===6 || lastSlide===7){
+            hitCount++;
+            const lim = LIMITS[lastSlide] || 60;
+            if (hitCount >= lim){
+              if (lastSlide===7){
+                // final 완료 → freeze
+                if (typeof window.__freezeGame === 'function') window.__freezeGame();
+              } else if (typeof window.showDivs === 'function'){
+                // 다음 레벨로
+                window.slideIndex = Math.min(7, (window.slideIndex||5) + 1);
+                window.showDivs(window.slideIndex);
+                resetIfChanged();
+              }
+            }
+          }
+        }catch(_){}
+        return origPlay();
+      };
+
+      return true;
+    }
+    if (!install()){
+      let tries=0; const id=setInterval(()=>{ if (install()||(++tries>200)) clearInterval(id); }, 50);
+    }
+  })();
+  </script>
+
+<script>
+(function(){
+  const successOverlay = document.getElementById('successOverlay');
+  const btn = document.getElementById('goDemoBtn');
+
+  function goNext(){
+    detach();
+    window.location.href = "pc_demo_windows.html"; // 체험 페이지 주소
+  }
+
+  function isSpaceLike(e){
+    // 다양한 브라우저/IME 대응
+    return e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
+  }
+
+  function onKeyDown(e){
+    if (isSpaceLike(e)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      goNext();
+    }
+  }
+
+  function onKeyUp(e){
+    if (isSpaceLike(e)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      goNext();
+    }
+  }
+
+  function detach(){
+    window.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('keyup', onKeyUp, true);
+    successOverlay.removeEventListener('keydown', onKeyDown, true);
+    successOverlay.removeEventListener('keyup', onKeyUp, true);
+  }
+
+  if (btn) btn.addEventListener('click', goNext);
+
+  // 게임 최종 완료시 successOverlay 띄우기
+  window.__freezeGame = function(){
+    window.__isFinalDone = true;
+    successOverlay.style.display = 'flex';
+
+    // 포커스 강제(키 이벤트 포착 안정화)
+    if (!successOverlay.hasAttribute('tabindex')) successOverlay.setAttribute('tabindex', '-1');
+    successOverlay.focus({preventScroll:true});
+
+    // 캡처 단계에서 keydown + keyup 모두 훅
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    successOverlay.addEventListener('keydown', onKeyDown, true);
+    successOverlay.addEventListener('keyup', onKeyUp, true);
+  };
+})();
+</script>
+
+
+
+</body>
+</html>

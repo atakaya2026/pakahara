@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>पाकाहारा</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" href="images/logo.png" type="image/png">
+<style>
+    /* 태국어에 최적화된 Sarabun 폰트를 불러옵니다 */
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700&display=swap');
+    /* 히어로 타이틀(데바나가리)용 폰트 */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700;900&display=swap');
+    
+    body { 
+        font-family: 'Sarabun', sans-serif; 
+        word-break: keep-all; 
+		line-break: loose;
+		overflow-x: hidden; /* 가로 스크롤 방지 */
+    }
+	span, p, h3 {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+.hero-copy {
+    left: 28%;
+    top: 42%;
+    transform: translate(-50%, -50%);
+    text-align: right;
+    font-family: 'Noto Sans Devanagari', 'Sarabun', sans-serif;
+}
+.hero-copy .hero-line-lead,
+.hero-copy .hero-line-main {
+    font-size: clamp(2.1rem, 5vw, 3.7rem);
+    font-weight: 900;
+    line-height: 1.2;
+    margin: 0;
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.45);
+}
+.hero-copy .hero-line-lead {
+    color: #ffd23f;
+}
+.hero-copy .hero-line-main {
+    color: #ffffff;
+}
+.hero-copy .hero-subtitle {
+    font-size: clamp(1.5rem, 3.2vw, 2rem);
+    font-weight: 400;
+    color: #f2f2f2;
+    margin: 0.9em 0 0;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+}
+@media (max-width: 767px) {
+    .hero-copy {
+        left: 50%;
+        top: auto;
+        bottom: 16%;
+        transform: translateX(-50%);
+        width: 88%;
+    }
+    .hero-copy .hero-line-lead,
+    .hero-copy .hero-line-main { font-size: clamp(1.5rem, 6.6vw, 2rem); }
+    .hero-copy .hero-subtitle { font-size: clamp(0.75rem, 3.2vw, 0.95rem); margin-top: 0.7em; }
+}
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 leading-relaxed">
+
+<nav class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+        <a href="#"><img src="images/logotype.png" alt="पाकाहारा Logo" class="h-12"></a>
+        
+        <div class="hidden md:flex items-center space-x-8 font-medium text-sm">
+            <a href="#intro" class="hover:text-blue-600 transition">निर्देश</a>
+            <a href="#how-to" class="hover:text-blue-600 transition">उपयोग विधि</a>
+            <a href="#pc-version" class="hover:text-blue-600 transition">पीसी संस्करण</a>
+            <a href="#demo" class="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center leading-none">
+                अभी आज़माएं
+            </a>
+        </div>
+    </div>
+</nav>
+
+<section class="w-full relative">
+    <picture>
+        <source media="(max-width: 767px)" srcset="images/hero_mobile.png">
+        <img src="images/hero.png" alt="Hatabang Hero" class="w-full object-cover">
+    </picture>
+    <div class="absolute leading-snug hero-copy">
+        <p class="hero-line-lead">Hinglish? बिदेसी ना चाह</p>
+        <p class="hero-line-main">अब तो पाकाहारा!</p>
+        <p class="hero-subtitle">आसान और तेज़ क्रांतिकारी देवनागरी कीबोर्ड</p>
+    </div>
+</section>
+
+<section id="intro" class="py-20 bg-white text-center px-6">
+    <div class="max-w-4xl mx-auto">
+        <p class="text-blue-600 font-bold mb-0 text-3xl md:text-5xl tracking-tighter -mt-6">
+    <span class="inline-block"><br><br><br>हिंदी कीबोर्ड की</span>
+    <br class="md:hidden"> <span class="inline-block">स्वतंत्रता की घोषणा</span>
+</p>
+        <h1 class="text-8xl md:text-[100px] font-black mb-0 md:leading-[1.2] text-gray-800" translate="no">
+			<span class="text-blue-600">पाकाहारा</span>
+		</h1>
+        <div class="mt-12">
+            <img src="images/mobile.png" alt="សបយក" class="mx-auto w-full max-w-xl drop-shadow-2xl rounded-xl">
+        </div>
+    </div>
+</section>
+
+    <section id="how-to" class="py-20 max-w-6xl mx-auto px-6 border-t border-gray-100">
+        <div class="flex flex-col md:flex-row items-center gap-12">
+            <div class="md:w-1/2">
+                <img src="images/how2step.png" alt="ဗျည်းရိုက်နှိပ်ပုံစံ" class="w-full rounded-xl border border-gray-100 shadow-sm">
+            </div>
+            <div class="md:w-1/2">
+                <h3 class="text-2xl font-bold mb-6 text-gray-800">व्यंजन टाइप करने की विधि: बुनियादी अक्षर दबाएं और परिवर्तन बटन से बदलें</h3>
+                <ul class="space-y-4 text-gray-600">
+                    <li class="flex items-start">
+                        <span class="text-blue-500 mr-3 mt-1">✓</span>
+                        <span>समान आकार वाले व्यंजनों को एक ही बटन पर व्यवस्थित किया गया है, ताकि उन्हें आसानी से खोजा जा सके।</span>
+
+					</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-20 bg-gray-50">
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="flex flex-col md:flex-row-reverse items-center gap-12">
+                <div class="md:w-1/2">
+                    <img src="images/how2vowel.png" alt="သရရိုက်နှိပ်ပုံစံ" class="w-full rounded-xl border border-gray-100 shadow-sm">
+                </div>
+                <div class="md:w-1/2">
+				<h3 class="text-2xl font-bold mb-4 text-gray-800 break-words">
+					स्वर और मात्राएँ उन बटनों पर स्थित हैं जो व्यंजनों के साथ उनके जुड़ने की दिशा के अनुसार हैं।
+				</h3>
+
+				<ul class="space-y-4 text-gray-600">
+					<li class="flex items-start">
+						<span class="text-blue-500 mr-3 mt-1">✓</span>
+						<span class="break-words text-lg">ऊपर लगने वाले स्वर ऊपर की पंक्ति में, नीचे वाले नीचे की पंक्ति में, बाईं ओर वाले बाईं ओर और दाईं ओर वाले दाईं ओर रखे गए हैं।</span>
+					</li>
+				</ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+
+    <section id="pc-version" class="py-20 bg-gray-900 text-white">
+        <div class="max-w-6xl mx-auto px-6 text-center">
+            <h2 class="text-3xl font-bold mb-6">पीसी पर पहले ही दिन से टच-टाइपिंग!</h2>
+            <p class="text-gray-400 mb-10 max-w-2xl mx-auto">
+                पाकाहारा में केवल 15 व्यंजनों को याद करके कोई भी पहले ही दिन से टच-टाइपिंग कर सकता है।<br>
+				इस तरह याद रखने का प्रयास करें:<br>
+				लाइन 1 ब, द, स, न, च : बिदेसी ना चाह<br>
+				लाइन 2 प, क, ह, र, ड : पाकाहारा देखो<br>
+				लाइन 3 ग, ज, त, म, ट : गज-तमतम टापटाप
+            </p>
+            <img src="images/pc1day.png" alt="PC ဗားရှင်း အသုံးပြုပုံ" class="mx-auto w-full max-w-2xl h-auto mb-10 rounded-lg shadow-2xl">
+        </div>
+    </section>
+
+<section id="demo" class="py-24 text-center">
+    <h2 class="text-3xl font-bold mb-16">पाकाहारा को खुद आज़माकर देखें</h2>
+    <div class="grid md:grid-cols-2 gap-10 max-w-4xl mx-auto px-6">
+
+        <!-- Mobile Card -->
+        <div class="p-10 rounded-3xl bg-white border border-gray-100 shadow-xl flex flex-col items-center relative overflow-hidden">
+            <h4 class="text-xl font-bold mb-6 text-gray-800">मोबाइल पाकाहारा</h4>
+            <div class="h-32 flex items-center mb-8">
+                <img src="images/mobile.png" alt="Mobile demo" class="max-h-full w-auto object-contain grayscale hover:grayscale-0 transition duration-500">
+            </div>
+            <a href="mobile_demo.html" class="inline-block w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-blue-600 transition text-center">अभी आज़माएं</a>
+
+            <!-- PC에서 볼 때: QR코드 오버레이 -->
+            <div id="mobile-overlay"
+                 class="absolute inset-0 rounded-3xl flex-col items-center justify-center gap-4 px-6"
+                 style="display:none; background:rgba(255,255,255,0.96); backdrop-filter:blur(4px);">
+                <h4 class="text-xl font-bold text-gray-800">मोबाइल पाकाहारा</h4>
+                <div id="qr-container" class="bg-white p-3 rounded-2xl shadow-md border border-gray-100"></div>
+                <p class="text-sm text-gray-500 text-center">📱 आज़माने के लिए फोन से<br>क्यूआर कोड स्कैन करें</p>
+            </div>
+        </div>
+
+        <!-- PC Card -->
+        <div class="p-10 rounded-3xl bg-white border border-gray-100 shadow-xl flex flex-col items-center relative overflow-hidden">
+            <h4 class="text-xl font-bold mb-6 text-gray-800">पीसी पाकाहारा</h4>
+            <div class="h-32 flex items-center mb-8">
+                <img src="images/pc.png" alt="PC demo" class="max-h-full w-auto object-contain grayscale hover:grayscale-0 transition duration-500">
+            </div>
+            <a href="try.html" class="inline-block w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-blue-600 transition text-center">अभी आज़माएं</a>
+
+            <!-- 모바일에서 볼 때: PC 안내 오버레이 -->
+            <div id="pc-overlay"
+                 class="absolute inset-0 rounded-3xl flex-col items-center justify-center gap-4 px-6"
+                 style="display:none; background:rgba(255,255,255,0.96); backdrop-filter:blur(4px);">
+                <h4 class="text-xl font-bold text-gray-800">पीसी पाकाहारा</h4>
+                <span class="text-5xl">🖥️</span>
+                <p class="text-sm text-gray-500 text-center">इस सुविधा के लिए पीसी कीबोर्ड की आवश्यकता है,<br>कृपया कंप्यूटर से लॉग इन करें।</p>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+<!-- QR 라이브러리 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function() {
+    var isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+    var mobileOverlay = document.getElementById('mobile-overlay');
+    var pcOverlay = document.getElementById('pc-overlay');
+    var qrContainer = document.getElementById('qr-container');
+
+    if (!isMobile) {
+        mobileOverlay.style.display = 'flex';
+        new QRCode(qrContainer, {
+            text: 'https://hatabang.com/mobile_demo.html',
+            width: 160,
+            height: 160,
+            colorDark: '#111827',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+        });
+    } else {
+        pcOverlay.style.display = 'flex';
+    }
+})();
+</script>
+
+
+    <footer class="py-12 border-t border-gray-100 text-center text-gray-400 text-sm">
+        <p>© 2026 pakahara All rights reserved.</p>
+    </footer>
+
+</body>
+</html>
