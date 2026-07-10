@@ -57,6 +57,11 @@
     backdrop-filter: none;
     border: none;
     position: relative;
+    /* keyboard-pc는 scale()로 축소되지만 레이아웃 박스는 원본(850px) 크기라
+       실제 보이는 크기(408x105)로 고정해서 옆 요소들이 붙게 만든다 */
+    width: 408px;
+    height: 105px;
+    flex-shrink: 0;
   }
   .challenge-btn {
     flex-shrink: 0;
@@ -75,6 +80,21 @@
     text-align: center;
   }
   .challenge-btn:hover { background: #d97706; }
+  .mnemonic-text {
+    flex-shrink: 0;
+    position: relative;
+    width: 200px;
+    height: 105px;
+    color: #fff;
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    font-weight: 700;
+    font-size: 19px;
+    text-align: left;
+    text-shadow: 1px 1px 5px rgba(0,0,0,0.65);
+    white-space: nowrap;
+  }
+  /* 각 줄의 top은 JS에서 옆 키맵의 해당 행과 같은 높이로 맞춘다 */
+  .mnemonic-text p { margin: 0; position: absolute; left: 0; right: 0; transform: translateY(-50%); }
   .keyboard-pc {
     transform: scale(0.48);
     transform-origin: center;
@@ -82,6 +102,7 @@
     flex-direction: column;
     gap: 8px;
     width: 850px;
+    flex-shrink: 0;
     margin-left: -200px;
     margin-top: -70px;
     align-self: flex-start;
@@ -120,17 +141,6 @@
   .key .main-char { font-size: 32px; font-weight: 900; line-height: 1; font-family: 'Noto Sans Devanagari', sans-serif; }
   .key .sub-chars { font-size: 18px; color: #555; line-height: 1; font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 700; }
 
-  .baby-label {
-    color: white;
-    font-size: 18px;
-    font-weight: bold;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-    position: absolute;
-    right: 45px;
-    top: 58%;
-    transform: translateY(-50%);
-    white-space: nowrap;
-  }
 </style>
 </head>
 <body>
@@ -160,13 +170,17 @@
 </div>
 
 <div class="kbd-area">
+  <div class="mnemonic-text">
+    <p>बिदेसी ना चाह</p>
+    <p>पाकाहारा देखो</p>
+    <p>गज-तमतम टापटाप</p>
+  </div>
   <div class="baby-guide-container">
     <div class="keyboard-pc" id="kbd">
       <div class="kb-row" id="row1"></div>
       <div class="kb-row" id="row2"></div>
       <div class="kb-row" id="row3"></div>
     </div>
-    <div class="baby-label">पाकाहारा Guide Map 1.0</div>
   </div>
   <button class="challenge-btn" onclick="location.href='challenge.html'">
     🏆 बिना देखे<br>टाइप करें!
@@ -460,6 +474,20 @@ function resetEditor() {
 }
 
 initKbd();
+
+// 암기 문구 각 줄을 옆 키맵의 1~3행과 같은 높이로 정렬
+function alignMnemonic() {
+  const box = document.querySelector('.mnemonic-text');
+  const ps = box.querySelectorAll('p');
+  const boxTop = box.getBoundingClientRect().top;
+  ['row1','row2','row3'].forEach((id, i) => {
+    const rowRect = document.getElementById(id).getBoundingClientRect();
+    const rowCenter = rowRect.top + rowRect.height / 2;
+    ps[i].style.top = (rowCenter - boxTop) + 'px';
+  });
+}
+alignMnemonic();
+window.addEventListener('resize', alignMnemonic);
 </script>
 </body>
 </html>
