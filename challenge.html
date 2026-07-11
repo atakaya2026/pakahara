@@ -173,7 +173,8 @@ function handleNext() {
 
 function handleVowelKey(def) {
   const isIndep = independentActive();
-  const chars = isIndep ? (def.indep || def.chars) : def.chars;
+  // 독립모음 모드에서는 독립모음 한 바퀴를 다 돈 다음 의존모음 한 바퀴, 다시 독립모음 순으로 순환한다
+  const chars = isIndep ? (def.indep ? def.indep.concat(def.chars) : def.chars) : def.chars;
 
   if (state.lastSignKey === def.id && state.signIndepMode === isIndep) {
     state.signTapIdx = (state.signTapIdx + 1) % chars.length;
