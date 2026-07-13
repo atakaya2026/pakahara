@@ -83,18 +83,19 @@
   .mnemonic-text {
     flex-shrink: 0;
     position: relative;
-    width: 200px;
+    width: 220px;
     height: 105px;
     color: #fff;
     font-family: 'Noto Sans Devanagari', sans-serif;
     font-weight: 700;
     font-size: 19px;
-    text-align: left;
+    text-align: right;
     text-shadow: 1px 1px 5px rgba(0,0,0,0.65);
     white-space: nowrap;
   }
-  /* 각 줄의 top은 JS에서 옆 키맵의 해당 행과 같은 높이로 맞춘다 */
-  .mnemonic-text p { margin: 0; position: absolute; left: 0; right: 0; transform: translateY(-50%); }
+  .mnemonic-text .hl { color: #f59e0b; }
+  /* 각 줄의 top/right는 JS에서 옆 키맵의 해당 행(계단식 위치)에 맞춰 계산한다 */
+  .mnemonic-text p { margin: 0; position: absolute; right: 0; white-space: nowrap; transform: translateY(-50%); }
   .keyboard-pc {
     transform: scale(0.48);
     transform-origin: center;
@@ -103,7 +104,7 @@
     gap: 8px;
     width: 850px;
     flex-shrink: 0;
-    margin-left: -200px;
+    margin-left: 0px;
     margin-top: -70px;
     align-self: flex-start;
   }
@@ -171,9 +172,9 @@
 
 <div class="kbd-area">
   <div class="mnemonic-text">
-    <p>बिदेसी ना चाह</p>
-    <p>पाकाहारा देखो</p>
-    <p>गज-तमतम टापटाप</p>
+    <p><span class="hl">ब</span>ड़ी <span class="hl">दि</span>क्कत <span class="hl">स</span>च, <span class="hl">न</span>ई <span class="hl">चा</span>हिए</p>
+    <p><span class="hl">पाकाहारा</span> <span class="hl">डा</span>लो</p>
+    <p><span class="hl">गु</span>र <span class="hl">जा</span>नो, <span class="hl">तो</span> <span class="hl">म</span>ज़ा <span class="hl">टा</span>इपिंग</p>
   </div>
   <div class="baby-guide-container">
     <div class="keyboard-pc" id="kbd">
@@ -183,7 +184,7 @@
     </div>
   </div>
   <button class="challenge-btn" onclick="location.href='challenge.html'">
-    🏆 बिना देखे<br>टाइप करें!
+    🏆 बिना देखे टाइप करें!
   </button>
 </div>
 
@@ -476,19 +477,34 @@ function resetEditor() {
 
 initKbd();
 
-// 암기 문구 각 줄을 옆 키맵의 1~3행과 같은 높이로 정렬
+// 문구 박스 폭을 도전 버튼 폭과 맞춰서 키맵이 항상 정중앙에 오게 한다
+function syncMnemonicWidth() {
+  const box = document.querySelector('.mnemonic-text');
+  const btn = document.querySelector('.challenge-btn');
+  box.style.width = '';
+  box.style.width = btn.getBoundingClientRect().width + 'px';
+}
+
+// 암기 문구 각 줄을 옆 키맵의 1~3행 "첫 키"와 같은 높이 + 같은 간격(계단식)으로 정렬
+// (행 컨테이너 자체는 padding-left가 있어도 위치가 안 밀리므로 첫 키 기준으로 재야 한다)
+const MNEMONIC_GAP = 18; // 각 문구 줄 ~ 해당 키맵 행 사이 간격(px)
 function alignMnemonic() {
+  syncMnemonicWidth();
   const box = document.querySelector('.mnemonic-text');
   const ps = box.querySelectorAll('p');
-  const boxTop = box.getBoundingClientRect().top;
+  const boxRect = box.getBoundingClientRect();
   ['row1','row2','row3'].forEach((id, i) => {
-    const rowRect = document.getElementById(id).getBoundingClientRect();
-    const rowCenter = rowRect.top + rowRect.height / 2;
-    ps[i].style.top = (rowCenter - boxTop) + 'px';
+    const rowEl = document.getElementById(id);
+    const keyRect = (rowEl.firstElementChild || rowEl).getBoundingClientRect();
+    const rowCenter = keyRect.top + keyRect.height / 2;
+    ps[i].style.top = (rowCenter - boxRect.top) + 'px';
+    ps[i].style.right = (boxRect.right - keyRect.left + MNEMONIC_GAP) + 'px';
   });
 }
 alignMnemonic();
 window.addEventListener('resize', alignMnemonic);
+// 웹폰트가 늦게 로드되면 버튼/문구 폭이 달라지므로 로드 완료 후 다시 맞춘다
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(alignMnemonic);
 </script>
 </body>
 </html>
