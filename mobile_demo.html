@@ -380,6 +380,7 @@ function handleEngBackspace() {
 
 function handleEngEnter() {
   appendText('\n');
+  if (state.engOneShot) { exitEnglishMode(); return; }
   render();
 }
 
