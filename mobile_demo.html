@@ -49,9 +49,10 @@
     flex-shrink: 0;
     border-top: 1px solid #888;
     background: #b5b0a8;
+    touch-action: none; /* 브라우저 기본 핀치줌/패닝을 막고 제스처를 JS가 전담 처리 */
   }
   #kbd-image { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
-  #kbd { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+  #kbd { position: absolute; top: 0; left: 0; right: 0; bottom: 0; touch-action: none; }
 
   .kbd-btn {
     position: absolute;
@@ -60,6 +61,7 @@
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
+    touch-action: none;
     display: flex; align-items: center; justify-content: center;
     font-family: 'Noto Sans Devanagari', sans-serif;
     font-weight: bold;
@@ -306,11 +308,21 @@ const ENG_BOT = {
   enter: { left:79.46, width:19.12 },
 };
 
+// 두 손가락 제스처 도중 닿은 손가락이 키 입력으로 잘못 찍히는 것을 막기 위한 장치.
+// 손가락이 닿는 순간 바로 입력을 확정하지 않고 GESTURE_GUARD_MS만큼 유예했다가,
+// 그 사이에 두 번째 손가락이 닿아 제스처로 판정되면 입력을 취소한다.
+const GESTURE_GUARD_MS = 70;
+let kbdTouchCount = 0;
+let kbdMultiTouchActive = false;
+
 function makeBtn(cls, style, onClick) {
   const b = document.createElement('button');
   b.className = 'kbd-btn ' + cls;
   Object.assign(b.style, style);
-  if (onClick) b.addEventListener('pointerdown', (e) => { e.preventDefault(); onClick(); });
+  if (onClick) b.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    setTimeout(() => { if (!kbdMultiTouchActive) onClick(); }, GESTURE_GUARD_MS);
+  });
   return b;
 }
 
@@ -450,21 +462,48 @@ function renderEng() {
     return Math.hypot(dx, dy);
   }
 
+  // 손가락 개수는 document 캡처 단계에서 센다(버튼 자신의 pointerdown 리스너보다 먼저
+  // 실행되어, 두 번째 손가락이 어떤 키 위에 닿아도 그 키의 입력 예약(makeBtn의 setTimeout)이
+  // 실행되기 전에 미리 kbdMultiTouchActive를 켜서 취소시킬 수 있다). 영문 모드 전환 시
+  // #kbd 내부 버튼들이 통째로 다시 그려지므로, wrap 대신 document에 붙여서 눌렀던 버튼이
+  // 도중에 재생성되어도(pointerup 시점에 원래 타깃이 이미 사라졌어도) 안정적으로 잡히게 한다.
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    kbdTouchCount++;
+    if (kbdTouchCount >= 2) kbdMultiTouchActive = true;
+  }, { capture: true });
+
+  function releasePointer(e) {
+    if (e.pointerType !== 'touch') return;
+    kbdTouchCount = Math.max(0, kbdTouchCount - 1);
+    if (kbdTouchCount === 0) kbdMultiTouchActive = false;
+  }
+  document.addEventListener('pointerup', releasePointer, { capture: true });
+  document.addEventListener('pointercancel', releasePointer, { capture: true });
+
+  // 네이티브 핀치줌이 같이 발동하면 제스처 이후에도 화면이 확대된 채로 남으므로,
+  // 두 손가락이 닿아 있는 동안은 확실히 preventDefault로 막는다(touch-action:none과 이중 방어).
   wrap.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) { startDist = dist(e.touches); triggered = false; }
-  }, { passive: true });
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      startDist = dist(e.touches);
+      triggered = false;
+    }
+  }, { passive: false });
 
   wrap.addEventListener('touchmove', (e) => {
-    if (e.touches.length !== 2 || startDist == null || triggered) return;
+    if (e.touches.length !== 2 || startDist == null) return;
+    e.preventDefault();
+    if (triggered) return;
     const ratio = dist(e.touches) / startDist;
-    if (ratio > 1.35) {
+    if (ratio > 1.15) {
       triggered = true;
       if (!state.engActive) enterEnglishMode();
-    } else if (ratio < 0.7) {
+    } else if (ratio < 0.85) {
       triggered = true;
       if (state.engActive) exitEnglishMode();
     }
-  }, { passive: true });
+  }, { passive: false });
 
   wrap.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) { startDist = null; triggered = false; }

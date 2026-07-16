@@ -193,6 +193,13 @@ function handleVowelKey(def) {
   state.activeRoot = null; state.activeCharIdx = 0;
 }
 
+function handleShiftLetter(ch) {
+  appendText(ch);
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+}
+
 function handleBS() {
   doBackspace();
   state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
@@ -227,6 +234,13 @@ window.addEventListener('keydown', (e) => {
   const k   = raw === ' ' ? ' ' : raw.toLowerCase();
   if (ignoredKeys.has(k)) return;
   if (k !== 'f5' && k !== 'f12') e.preventDefault();
+
+  // Shift+알파벳 키는 한디어 모드를 우회하고 대문자 로마자를 그대로 입력한다
+  if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && /^[a-z]$/.test(k)) {
+    handleShiftLetter(raw);
+    editor.scrollTop = editor.scrollHeight;
+    return;
+  }
 
   if (k === 'backspace') { handleBS(); editor.scrollTop = editor.scrollHeight; return; }
   if (k === 'enter')     { handleEnter(); editor.scrollTop = editor.scrollHeight; return; }
