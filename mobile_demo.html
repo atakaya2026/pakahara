@@ -92,6 +92,20 @@
   .kbd-label.independent .label-item { color: #1a6bb8; }
   .kbd-label.next-active { color: #16a34a; }
 
+  /* 영문 모드: 로마자 글자 라벨 */
+  .kbd-label.kbd-eng-letter { color: #1a1208; font-weight: 700; }
+  .kbd-label.kbd-eng-letter .label-item { font-size: clamp(15px, 5.6vw, 25px); }
+
+  /* 시프트 키: 캡스락/일시 대문자 상태를 초록 점으로 표시 */
+  .kbd-shift { font-size: 0; }
+  .kbd-shift .shift-dot {
+    position: absolute; top: 10%; right: 12%;
+    width: 16%; height: 16%; border-radius: 50%;
+    background: transparent; transition: background 0.15s;
+  }
+  .kbd-shift.locked .shift-dot { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.9); }
+  .kbd-shift.once .shift-dot { background: #86efac; }
+
 </style>
 </head>
 <body>
@@ -160,6 +174,10 @@ let state = {
   signTapIdx: 0,
   signIndepMode: false,
   independentMode: false,
+  // 영문(로마자) 모드 상태
+  engActive: false,       // true면 쿼티 자판 표시 중
+  engShiftState: 'lock',  // 'lock'(캡스락) | 'once'(다음 한 글자만 대문자) | 'off'(소문자)
+  engOneShot: true,       // true면 스페이스 입력 시 자동으로 파카하라 복귀
 };
 
 const editor = document.getElementById('editor');
@@ -269,6 +287,25 @@ const KEY_W = 9.53, KEY_H = 19.97;
 const BOT_Y = 77.12, BOT_H = 19.92;
 const BOT_SECTIONS = { num:[0.92,26.04], space:[26.04,73.82], enter:[73.82,98.94] };
 
+// ── 영문(쿼티) 자판 좌표 (images/keyboard_eng.png 2176×1182 실측 기준 %) ──
+const ENG_ROW_TOP = [2.45, 27.50, 52.54];
+const ENG_ROW_H = 20.13;
+const ENG_KEY_W = 8.594;
+const ENG_ROW1 = ['Q','W','E','R','T','Y','U','I','O','P'];
+const ENG_ROW2 = ['A','S','D','F','G','H','J','K','L'];
+const ENG_ROW3 = ['Z','X','C','V','B','N','M'];
+const ENG_ROW1_COLS = [1.06,10.94,20.86,30.76,40.67,50.55,60.48,70.36,80.29,90.17];
+const ENG_ROW2_COLS = [6.07,15.95,25.87,35.76,45.64,55.56,65.44,75.37,85.25];
+const ENG_ROW3_COLS = [15.86,25.78,35.66,45.54,55.47,65.35,75.28];
+const ENG_SHIFT = { left:1.01, width:11.90 };
+const ENG_BACKSPACE = { left:86.99, width:11.90 };
+const ENG_BOT_Y = 77.08, ENG_BOT_H = 20.13;
+const ENG_BOT = {
+  num:   { left:1.29,  width:19.30 },
+  space: { left:22.93, width:54.27 },
+  enter: { left:79.46, width:19.12 },
+};
+
 function makeBtn(cls, style, onClick) {
   const b = document.createElement('button');
   b.className = 'kbd-btn ' + cls;
@@ -277,7 +314,169 @@ function makeBtn(cls, style, onClick) {
   return b;
 }
 
+function makeLetterBtn(ch, style, onClick) {
+  const b = makeBtn('kbd-label kbd-eng-letter', style, onClick);
+  const sp = document.createElement('span');
+  sp.className = 'label-item';
+  sp.textContent = ch;
+  b.appendChild(sp);
+  return b;
+}
+
+// ── 영문 모드 진입/이탈 (두 손가락으로 펼치기/좁히기) ──
+function enterEnglishMode() {
+  if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
+  state.engActive = true;
+  state.engShiftState = 'lock';
+  state.engOneShot = true;
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  document.getElementById('kbd-image').src = 'images/keyboard_eng.png';
+  render();
+}
+
+function exitEnglishMode() {
+  if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
+  state.engActive = false;
+  state.engShiftState = 'lock';
+  state.engOneShot = true;
+  document.getElementById('kbd-image').src = 'images/keyboard.png';
+  render();
+}
+
+function handleEngLetter(ch) {
+  appendText(state.engShiftState === 'off' ? ch.toLowerCase() : ch.toUpperCase());
+  if (state.engShiftState === 'once') state.engShiftState = 'off';
+  render();
+}
+
+function handleEngSpace() {
+  appendText(' ');
+  if (state.engOneShot) { exitEnglishMode(); return; }
+  render();
+}
+
+function handleEngBackspace() {
+  backspace();
+  render();
+}
+
+function handleEngEnter() {
+  appendText('\n');
+  render();
+}
+
+// 시프트: 더블탭=캡스락 토글(다른 폰 키보드와 동일 관례), 싱글탭=임시 대문자 1글자
+// 단, 최초 진입 직후(캡스락+일회성)에는 싱글탭 한 번으로 락과 일회성을 모두 해제한다
+// 더블탭 여부는 두 번째 탭이 실제로 오는지 지켜봐야 하므로, 첫 탭은 타이머로 유예한 뒤
+// 유예 시간 안에 두 번째 탭이 오면 그 시점에 취소하고 토글로 대체한다(사후 시간차 비교 방식은
+// 첫 탭에서 싱글 동작이 이미 실행돼버려 더블탭 시 엉뚱하게 겹쳐 적용되는 버그가 있었음).
+let shiftTapTimer = null;
+function handleShiftTap() {
+  if (shiftTapTimer) {
+    clearTimeout(shiftTapTimer);
+    shiftTapTimer = null;
+    state.engShiftState = state.engShiftState === 'lock' ? 'off' : 'lock';
+    render();
+    return;
+  }
+  shiftTapTimer = setTimeout(() => {
+    shiftTapTimer = null;
+    if (state.engShiftState === 'lock') {
+      state.engShiftState = 'off';
+      state.engOneShot = false;
+    } else if (state.engShiftState === 'once') {
+      state.engShiftState = 'off';
+    } else {
+      state.engShiftState = 'once';
+    }
+    render();
+  }, 300);
+}
+
+function renderEng() {
+  const kbd = document.getElementById('kbd');
+  kbd.innerHTML = '';
+  const upper = state.engShiftState !== 'off';
+
+  ENG_ROW1.forEach((ch, i) => kbd.appendChild(makeLetterBtn(upper ? ch : ch.toLowerCase(), {
+    left: ENG_ROW1_COLS[i] + '%', top: ENG_ROW_TOP[0] + '%', width: ENG_KEY_W + '%', height: ENG_ROW_H + '%'
+  }, () => handleEngLetter(ch))));
+
+  ENG_ROW2.forEach((ch, i) => kbd.appendChild(makeLetterBtn(upper ? ch : ch.toLowerCase(), {
+    left: ENG_ROW2_COLS[i] + '%', top: ENG_ROW_TOP[1] + '%', width: ENG_KEY_W + '%', height: ENG_ROW_H + '%'
+  }, () => handleEngLetter(ch))));
+
+  ENG_ROW3.forEach((ch, i) => kbd.appendChild(makeLetterBtn(upper ? ch : ch.toLowerCase(), {
+    left: ENG_ROW3_COLS[i] + '%', top: ENG_ROW_TOP[2] + '%', width: ENG_KEY_W + '%', height: ENG_ROW_H + '%'
+  }, () => handleEngLetter(ch))));
+
+  const shiftCls = 'kbd-shift' + (state.engShiftState === 'lock' ? ' locked' : state.engShiftState === 'once' ? ' once' : '');
+  const shiftBtn = makeBtn(shiftCls, {
+    left: ENG_SHIFT.left + '%', top: ENG_ROW_TOP[2] + '%', width: ENG_SHIFT.width + '%', height: ENG_ROW_H + '%'
+  }, handleShiftTap);
+  const dot = document.createElement('span');
+  dot.className = 'shift-dot';
+  shiftBtn.appendChild(dot);
+  kbd.appendChild(shiftBtn);
+
+  kbd.appendChild(makeBtn('kbd-bs', {
+    left: ENG_BACKSPACE.left + '%', top: ENG_ROW_TOP[2] + '%', width: ENG_BACKSPACE.width + '%', height: ENG_ROW_H + '%'
+  }, handleEngBackspace));
+
+  kbd.appendChild(makeBtn('kbd-123', {
+    left: ENG_BOT.num.left + '%', top: ENG_BOT_Y + '%', width: ENG_BOT.num.width + '%', height: ENG_BOT_H + '%'
+  }, () => { /* 숫자판은 데모 범위 밖 */ }));
+
+  kbd.appendChild(makeBtn('kbd-space', {
+    left: ENG_BOT.space.left + '%', top: ENG_BOT_Y + '%', width: ENG_BOT.space.width + '%', height: ENG_BOT_H + '%'
+  }, handleEngSpace));
+
+  kbd.appendChild(makeBtn('kbd-enter', {
+    left: ENG_BOT.enter.left + '%', top: ENG_BOT_Y + '%', width: ENG_BOT.enter.width + '%', height: ENG_BOT_H + '%'
+  }, handleEngEnter));
+}
+
+// ── 두 손가락 펼치기/좁히기 제스처로 영문 ↔ 파카하라 전환 ──
+(function initPinchGesture() {
+  const wrap = document.getElementById('keyboard-wrap');
+  let startDist = null;
+  let triggered = false;
+
+  function dist(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  wrap.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) { startDist = dist(e.touches); triggered = false; }
+  }, { passive: true });
+
+  wrap.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2 || startDist == null || triggered) return;
+    const ratio = dist(e.touches) / startDist;
+    if (ratio > 1.35) {
+      triggered = true;
+      if (!state.engActive) enterEnglishMode();
+    } else if (ratio < 0.7) {
+      triggered = true;
+      if (state.engActive) exitEnglishMode();
+    }
+  }, { passive: true });
+
+  wrap.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) { startDist = null; triggered = false; }
+  });
+})();
+
 function render() {
+  if (state.engActive) { renderEng(); return; }
+  renderDevanagari();
+}
+
+function renderDevanagari() {
   const kbd = document.getElementById('kbd');
   kbd.innerHTML = '';
   const isIndep = independentActive();
@@ -345,8 +544,13 @@ function render() {
 }
 
 function resetAll() {
+  if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
   setText('');
-  state = { activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false };
+  state = {
+    activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false,
+    engActive:false, engShiftState:'lock', engOneShot:true,
+  };
+  document.getElementById('kbd-image').src = 'images/keyboard.png';
   render();
 }
 
