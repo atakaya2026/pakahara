@@ -58,9 +58,9 @@
     border: none;
     position: relative;
     /* keyboard-pc는 scale()로 축소되지만 레이아웃 박스는 원본(850px) 크기라
-       실제 보이는 크기(408x105)로 고정해서 옆 요소들이 붙게 만든다 */
+       실제 보이는 크기(408x131, 스페이스바 행 포함)로 고정해서 옆 요소들이 붙게 만든다 */
     width: 408px;
-    height: 105px;
+    height: 131px;
     flex-shrink: 0;
   }
   .challenge-btn {
@@ -134,10 +134,13 @@
   .key.active { transform: translateY(4px); box-shadow: none; background: #eef2ff !important; }
 
   .key.next-key { color: #78350f; font-weight: 900; font-size: 26px; }
-  .key.next-key.active-group { background-color: #d1fae5 !important; border: 1px solid #16a34a; color: #16a34a; }
-  .key.next-key.independent { background-color: #dbeafe !important; border: 1px solid #1a6bb8; color: #1a6bb8; }
+  .key.next-key.active-group { background-color: #d1fae5 !important; border: 1px solid #16a34a; color: #00b0f0; }
+  .key.next-key.independent { background-color: #dbeafe !important; border: 1px solid #1a6bb8; color: #404040; }
   .key.sign-color { color: #1a5228; font-weight: 700; font-size: 26px; }
-  .key.sign-color.independent { color: #1a6bb8; }
+  .key.sign-color.independent { color: #404040; }
+
+  #row4 { justify-content: center; }
+  .key.space-key { width: 33.333%; height: 48px; font-size: 22px; font-weight: 800; color: #333; margin-right: 75px;}
 
   .key .main-char { font-size: 32px; font-weight: 900; line-height: 1; font-family: 'Noto Sans Devanagari', sans-serif; }
   .key .sub-chars { font-size: 18px; color: #555; line-height: 1; font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 700; }
@@ -181,6 +184,7 @@
       <div class="kb-row" id="row1"></div>
       <div class="kb-row" id="row2"></div>
       <div class="kb-row" id="row3"></div>
+      <div class="kb-row" id="row4"></div>
     </div>
   </div>
   <button class="challenge-btn" onclick="location.href='challenge.html'">
@@ -192,18 +196,18 @@
 // ── 자음 그룹: 대표 자음 입력 직후 다음키를 누르면 그룹 내에서 순차 전환 ──
 const consonantGroups = {
   'क': ['क','ख'],
-  'ग': ['ग','घ','ङ'],
+  'ग': ['ग','घ'],
   'च': ['च','छ'],
-  'ज': ['ज','झ','ञ'],
+  'ज': ['ज','झ'],
   'ट': ['ट','ठ'],
-  'ड': ['ड','ढ','ण'],
+  'ड': ['ड','ढ'],
   'त': ['त','थ'],
   'द': ['द','ध'],
-  'न': ['न','?','!'],
+  'न': ['न','ण','ञ'],
   'प': ['प','फ'],
   'ब': ['ब','भ'],
-  'म': ['म','ॐ','₹'],
-  'र': ['र','ल'],
+  'म': ['म','ङ'],
+  'र': ['र','ल','ळ'],
   'ह': ['ह','य','व'],
   'स': ['स','श','ष'],
 };
@@ -222,7 +226,7 @@ const rowDefs = [
     { key:'t', col:5, type:'consonant', root:'च' },
     { key:'_sp1', type:'spacer' },
     { key:'y', col:6, type:'empty' },
-    { key:'u', col:7, type:'sign', chars:['ं','ँ'], id:'r0c0' },
+    { key:'u', col:7, type:'sign', chars:['ं','ँ'], id:'r0c0', indepGrow:'mark', indepLabel:['?','!'] },
     { key:'i', col:8, type:'sign', chars:['े','ै'], indep:['ए','ऐ'], id:'r0c1' },
     { key:'o', col:9, type:'sign', chars:['ो','ौ'], indep:['ओ','औ'], id:'r0c2' },
     { key:'p', col:10, type:'empty' },
@@ -246,8 +250,11 @@ const rowDefs = [
     { key:'v', col:4, type:'consonant', root:'म' },
     { key:'b', col:5, type:'consonant', root:'ट' },
     { key:'_sp3', type:'spacer' },
-    { key:'n', col:6, type:'sign', chars:['्','़'], id:'r2c0' },
+    { key:'n', col:6, type:'sign', chars:['्','़'], id:'r2c0', indepGrow:'period', indepLabel:[',','.'] },
     { key:'m', col:7, type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'], id:'r2c1' },
+  ],
+  [
+    { key:' ', type:'space', label:'स्पेस/स्वर' },
   ],
 ];
 
@@ -309,8 +316,38 @@ function handleNext() {
   updateKbdUI();
 }
 
+// 독립모음 모드에서 u/n 키는 의존 부호 대신 문장부호를 낸다.
+// u: ? - ! - ?? - !! - ??? - !!! - ???? - ... (상한 없이 계속 늘어남)
+// n: , - . - .. - ... - .... - ... (마침표는 상한 없이 계속 늘어남)
+function punctSeq(id, idx) {
+  if (id === 'r0c0') { const n = Math.floor(idx / 2) + 1; return (idx % 2 === 0 ? '?' : '!').repeat(n); }
+  if (id === 'r2c0') { return idx === 0 ? ',' : '.'.repeat(idx); }
+  return '';
+}
+
+// 이 키들은 입력 후 항상 끝에 공란을 하나 붙여두고, 같은 키를 다시 누르면
+// 직전에 붙인 "부호+공란"을 지우고 다음 부호+공란으로 교체한다.
+function handlePunctKey(def) {
+  if (state.lastSignKey === def.id && state.signIndepMode) {
+    const prevStr = punctSeq(def.id, state.signTapIdx);
+    const t = getText();
+    setText(t.slice(0, -(prevStr.length + 1)));
+    state.signTapIdx += 1;
+    appendText(punctSeq(def.id, state.signTapIdx) + ' ');
+  } else {
+    const t = getText();
+    if (t.endsWith(' ')) setText(t.slice(0, -1));
+    appendText(punctSeq(def.id, 0) + ' ');
+    state.independentMode = true;
+    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = true;
+  }
+  state.activeRoot = null; state.activeCharIdx = 0;
+  updateKbdUI();
+}
+
 function handleVowelKey(def) {
   const isIndep = independentActive();
+  if (isIndep && def.indepGrow) { handlePunctKey(def); return; }
   // 독립모음 모드에서는 독립모음 한 바퀴를 다 돈 다음 의존모음 한 바퀴, 다시 독립모음 순으로 순환한다
   const chars = isIndep ? (def.indep ? def.indep.concat(def.chars) : def.chars) : def.chars;
 
@@ -384,7 +421,7 @@ window.addEventListener('keydown', (e) => {
   if (ignoredKeys.has(k)) return;
   if (k !== 'f5' && k !== 'f12') e.preventDefault();
 
-  const el = document.getElementById(`key-${k}`);
+  const el = document.getElementById(`key-${k === ' ' ? 'space' : k}`);
   if (el) el.classList.add('active');
 
   // Shift+알파벳 키는 한디어 모드를 우회하고 대문자 로마자를 그대로 입력한다
@@ -410,7 +447,7 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   const k = e.key === ' ' ? ' ' : e.key.toLowerCase();
-  const el = document.getElementById(`key-${k}`);
+  const el = document.getElementById(`key-${k === ' ' ? 'space' : k}`);
   if (el) el.classList.remove('active');
 });
 
@@ -421,7 +458,7 @@ function initKbd() {
     row.forEach((def) => {
       const div = document.createElement('div');
       div.className = 'key';
-      div.id = `key-${def.key}`;
+      div.id = `key-${def.key === ' ' ? 'space' : def.key}`;
 
       if (blueCols.has(def.col)) div.classList.add('blue-zone');
 
@@ -447,6 +484,10 @@ function initKbd() {
       } else if (def.type === 'spacer') {
         div.className = 'spacer';
         div.removeAttribute('id');
+
+      } else if (def.type === 'space') {
+        div.classList.add('space-key');
+        div.textContent = def.label;
       }
 
       rowEl.appendChild(div);
@@ -478,8 +519,8 @@ function updateKbdUI() {
     if (def.type !== 'sign') return;
     const el = document.getElementById(`key-${def.key}`);
     if (!el) return;
-    const chars = isIndep ? (def.indep || def.chars) : def.chars;
-    el.classList.toggle('independent', isIndep && !!def.indep);
+    const chars = isIndep && def.indepGrow ? def.indepLabel : (isIndep ? (def.indep || def.chars) : def.chars);
+    el.classList.toggle('independent', isIndep && (!!def.indep || !!def.indepGrow));
     el.textContent = chars.map(c => isDiacritic(c) ? '◌'+c : c).join(' ');
   }));
 }

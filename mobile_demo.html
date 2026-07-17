@@ -91,8 +91,8 @@
   .kbd-label.kbd-next.count-2 .label-item { font-size: clamp(15px, 5.6vw, 25px); }
   .kbd-label.kbd-next.next-idle.count-1 .label-item { font-size: clamp(13px, 4.6vw, 20px); }
   .kbd-label.kbd-next { gap: 0 1px; }
-  .kbd-label.independent .label-item { color: #1a6bb8; }
-  .kbd-label.next-active { color: #16a34a; }
+  .kbd-label.independent .label-item { color: #404040; }
+  .kbd-label.next-active { color: #00b0f0; }
 
   /* 영문 모드: 로마자 글자 라벨 */
   .kbd-label.kbd-eng-letter { color: #1a1208; font-weight: 700; }
@@ -127,18 +127,18 @@
 // ── 자음 그룹: 대표 자음 입력 직후 다음키(K)를 누르면 그룹 내에서 순차 전환 ──
 const consonantGroups = {
   'क': ['क','ख'],
-  'ग': ['ग','घ','ङ'],
+  'ग': ['ग','घ'],
   'च': ['च','छ'],
-  'ज': ['ज','झ','ञ'],
+  'ज': ['ज','झ'],
   'ट': ['ट','ठ'],
-  'ड': ['ड','ढ','ण'],
+  'ड': ['ड','ढ'],
   'त': ['त','थ'],
   'द': ['द','ध'],
-  'न': ['न','?','!'],
+  'न': ['न','ण','ञ'],
   'प': ['प','फ'],
   'ब': ['ब','भ'],
-  'म': ['म','ॐ','₹'],
-  'र': ['र','ल'],
+  'म': ['म','ङ'],
+  'र': ['र','ल','ळ'],
   'ह': ['ह','य','व'],
   'स': ['स','श','ष'],
 };
@@ -153,7 +153,7 @@ const leftKeys = [
 // indep: 독립모음 모드일 때 대체 표시/입력되는 문자 (없으면 chars 그대로 유지)
 const rightKeys = [
   [
-    { id:'U', type:'sign', chars:['ं','ँ'] },
+    { id:'U', type:'sign', chars:['ं','ँ'], indepGrow:'mark', indepLabel:['?','!'] },
     { id:'I', type:'sign', chars:['े','ै'], indep:['ए','ऐ'] },
     { id:'O', type:'sign', chars:['ो','ौ'], indep:['ओ','औ'] },
   ],
@@ -163,7 +163,7 @@ const rightKeys = [
     { id:'L', type:'sign', chars:['ा','ी','ः'], indep:['आ','ई'] },
   ],
   [
-    { id:'N', type:'sign', chars:['्','़'] },
+    { id:'N', type:'sign', chars:['्','़'], indepGrow:'period', indepLabel:[',','.'] },
     { id:'M', type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'] },
     { id:'BS', type:'bs' },
   ],
@@ -250,6 +250,35 @@ function handleVowelKey(def) {
       appendText(chars[0]);
     }
     state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = isIndep;
+  }
+  state.activeRoot = null; state.activeCharIdx = 0;
+  render();
+}
+
+// 독립모음 모드에서 U(1행6열)·N(3행6열) 키는 의존 부호 대신 문장부호를 낸다.
+// U: ? - ! - ?? - !! - ??? - !!! - ???? - ... (상한 없이 계속 늘어남)
+// N: , - . - .. - ... - .... - ... (마침표는 상한 없이 계속 늘어남)
+function punctSeq(id, idx) {
+  if (id === 'U') { const n = Math.floor(idx / 2) + 1; return (idx % 2 === 0 ? '?' : '!').repeat(n); }
+  if (id === 'N') { return idx === 0 ? ',' : '.'.repeat(idx); }
+  return '';
+}
+
+// 이 키들은 입력 후 항상 끝에 공란을 하나 붙여두고, 같은 키를 다시 누르면
+// 직전에 붙인 "부호+공란"을 지우고 다음 부호+공란으로 교체한다.
+function handlePunctKey(def) {
+  if (state.lastSignKey === def.id && state.signIndepMode) {
+    const prevStr = punctSeq(def.id, state.signTapIdx);
+    const t = getText();
+    setText(t.slice(0, -(prevStr.length + 1)));
+    state.signTapIdx += 1;
+    appendText(punctSeq(def.id, state.signTapIdx) + ' ');
+  } else {
+    const t = getText();
+    if (t.endsWith(' ')) setText(t.slice(0, -1));
+    appendText(punctSeq(def.id, 0) + ' ');
+    state.independentMode = true;
+    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = true;
   }
   state.activeRoot = null; state.activeCharIdx = 0;
   render();
@@ -533,7 +562,7 @@ function renderDevanagari() {
         let extraCls = ' kbd-next';
         if (isIndep) { labels = ['अ']; extraCls += ' independent'; }
         else if (state.activeRoot) { labels = consonantGroups[state.activeRoot].slice(1); extraCls += ' next-active'; }
-        else { labels = ['➤']; extraCls += ' next-idle'; }
+        else { labels = []; extraCls += ' next-idle'; }
         if (labels.length) extraCls += ' count-' + labels.length;
         const b = makeBtn('kbd-label' + extraCls, style, handleNext);
         labels.forEach(ch => {
@@ -547,15 +576,27 @@ function renderDevanagari() {
         kbd.appendChild(makeBtn('kbd-bs', style, handleBS));
 
       } else if (rk.type === 'sign') {
-        const chars = isIndep ? (rk.indep || rk.chars) : rk.chars;
-        const cls = 'kbd-label count-' + chars.length + (isIndep && rk.indep ? ' independent' : '');
-        const b = makeBtn(cls, style, () => handleVowelKey(rk));
-        chars.forEach(ch => {
-          const sp = document.createElement('span');
-          sp.className = 'label-item'; sp.textContent = ch;
-          b.appendChild(sp);
-        });
-        kbd.appendChild(b);
+        if (isIndep && rk.indepGrow) {
+          const chars = rk.indepLabel;
+          const cls = 'kbd-label count-' + chars.length + ' independent';
+          const b = makeBtn(cls, style, () => handlePunctKey(rk));
+          chars.forEach(ch => {
+            const sp = document.createElement('span');
+            sp.className = 'label-item'; sp.textContent = ch;
+            b.appendChild(sp);
+          });
+          kbd.appendChild(b);
+        } else {
+          const chars = isIndep ? (rk.indep || rk.chars) : rk.chars;
+          const cls = 'kbd-label count-' + chars.length + (isIndep && rk.indep ? ' independent' : '');
+          const b = makeBtn(cls, style, () => handleVowelKey(rk));
+          chars.forEach(ch => {
+            const sp = document.createElement('span');
+            sp.className = 'label-item'; sp.textContent = ch;
+            b.appendChild(sp);
+          });
+          kbd.appendChild(b);
+        }
       }
     }
   }

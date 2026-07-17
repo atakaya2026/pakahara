@@ -66,18 +66,18 @@
 // ── 자음 그룹: 대표 자음 입력 직후 다음키를 누르면 그룹 내에서 순차 전환 ──
 const consonantGroups = {
   'क': ['क','ख'],
-  'ग': ['ग','घ','ङ'],
+  'ग': ['ग','घ'],
   'च': ['च','छ'],
-  'ज': ['ज','झ','ञ'],
+  'ज': ['ज','झ'],
   'ट': ['ट','ठ'],
-  'ड': ['ड','ढ','ण'],
+  'ड': ['ड','ढ'],
   'त': ['त','थ'],
   'द': ['द','ध'],
-  'न': ['न','?','!'],
+  'न': ['न','ण','ञ'],
   'प': ['प','फ'],
   'ब': ['ब','भ'],
-  'म': ['म','ॐ','₹'],
-  'र': ['र','ल'],
+  'म': ['म','ङ'],
+  'र': ['र','ल','ळ'],
   'ह': ['ह','य','व'],
   'स': ['स','श','ष'],
 };
@@ -91,7 +91,7 @@ const rowDefs = [
     { key:'r', col:4, type:'consonant', root:'न' },
     { key:'t', col:5, type:'consonant', root:'च' },
     { key:'y', col:6, type:'empty' },
-    { key:'u', col:7, type:'sign', chars:['ं','ँ'], id:'r0c0' },
+    { key:'u', col:7, type:'sign', chars:['ं','ँ'], id:'r0c0', indepGrow:'mark' },
     { key:'i', col:8, type:'sign', chars:['े','ै'], indep:['ए','ऐ'], id:'r0c1' },
     { key:'o', col:9, type:'sign', chars:['ो','ौ'], indep:['ओ','औ'], id:'r0c2' },
     { key:'p', col:10, type:'empty' },
@@ -113,7 +113,7 @@ const rowDefs = [
     { key:'c', col:3, type:'consonant', root:'त' },
     { key:'v', col:4, type:'consonant', root:'म' },
     { key:'b', col:5, type:'consonant', root:'ट' },
-    { key:'n', col:6, type:'sign', chars:['्','़'], id:'r2c0' },
+    { key:'n', col:6, type:'sign', chars:['्','़'], id:'r2c0', indepGrow:'period' },
     { key:'m', col:7, type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'], id:'r2c1' },
   ],
 ];
@@ -171,8 +171,37 @@ function handleNext() {
   state.lastSignKey = null; state.signTapIdx = 0;
 }
 
+// 독립모음 모드에서 u/n 키는 의존 부호 대신 문장부호를 낸다.
+// u: ? - ! - ?? - !! - ??? - !!! - ???? - ... (상한 없이 계속 늘어남)
+// n: , - . - .. - ... - .... - ... (마침표는 상한 없이 계속 늘어남)
+function punctSeq(id, idx) {
+  if (id === 'r0c0') { const n = Math.floor(idx / 2) + 1; return (idx % 2 === 0 ? '?' : '!').repeat(n); }
+  if (id === 'r2c0') { return idx === 0 ? ',' : '.'.repeat(idx); }
+  return '';
+}
+
+// 이 키들은 입력 후 항상 끝에 공란을 하나 붙여두고, 같은 키를 다시 누르면
+// 직전에 붙인 "부호+공란"을 지우고 다음 부호+공란으로 교체한다.
+function handlePunctKey(def) {
+  if (state.lastSignKey === def.id && state.signIndepMode) {
+    const prevStr = punctSeq(def.id, state.signTapIdx);
+    const t = getText();
+    setText(t.slice(0, -(prevStr.length + 1)));
+    state.signTapIdx += 1;
+    appendText(punctSeq(def.id, state.signTapIdx) + ' ');
+  } else {
+    const t = getText();
+    if (t.endsWith(' ')) setText(t.slice(0, -1));
+    appendText(punctSeq(def.id, 0) + ' ');
+    state.independentMode = true;
+    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = true;
+  }
+  state.activeRoot = null; state.activeCharIdx = 0;
+}
+
 function handleVowelKey(def) {
   const isIndep = independentActive();
+  if (isIndep && def.indepGrow) { handlePunctKey(def); return; }
   // 독립모음 모드에서는 독립모음 한 바퀴를 다 돈 다음 의존모음 한 바퀴, 다시 독립모음 순으로 순환한다
   const chars = isIndep ? (def.indep ? def.indep.concat(def.chars) : def.chars) : def.chars;
 
