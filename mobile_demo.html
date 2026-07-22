@@ -425,6 +425,9 @@ function makeBtn(cls, style, onClick) {
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       downPointerId = e.pointerId;
+      // 손가락이 살짝 흔들려 이웃 키 쪽으로 pointerup이 잡혀도 이 키가 눌린 걸로
+      // 인식하도록 포인터를 붙잡아둔다(캡처해도 wrap까지의 버블링은 그대로 유지됨).
+      try { b.setPointerCapture(e.pointerId); } catch (err) {}
     });
     b.addEventListener('pointerup', (e) => {
       if (e.pointerId !== downPointerId) return;
@@ -610,11 +613,17 @@ function renderEng() {
     if (Math.abs(dy) < Math.abs(dx) * SWIPE_V_H_RATIO) return;
     triggered = true;
     kbdGestureActive = true;
+    // 스와이프가 확정된 순간 이 포인터를 wrap이 강제로 붙잡는다. 이게 없으면
+    // 손가락이 wrap 밖(예: 바로 위 입력창)으로 빠져나간 채로 손을 뗄 때 pointerup이
+    // wrap까지 전달되지 않아 kbdGestureActive가 true로 영원히 걸려버리고, 그 순간부터
+    // 모든 키 입력이 무시되는 "먹통" 상태가 됐었다.
+    try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
     toggleEnglishMode();
   });
 
   function endGesture(e) {
     if (e.pointerId !== activePointerId) return;
+    try { wrap.releasePointerCapture(e.pointerId); } catch (err) {}
     activePointerId = null; startX = null; startY = null; triggered = false; kbdGestureActive = false;
   }
   wrap.addEventListener('pointerup', endGesture);
@@ -708,6 +717,7 @@ function renderDevanagari() {
 function resetAll() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
   pendingUndo = null;
+  kbdGestureActive = false; // 혹시 제스처 추적이 꼬여 키 입력이 막혀 있었더라도 리셋으로는 항상 풀리도록
   setText('');
   state = {
     activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false,
