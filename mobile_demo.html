@@ -180,13 +180,7 @@ let state = {
   // 영문(로마자) 모드 상태
   engActive: false,       // true면 쿼티 자판 표시 중
   engShiftState: 'off',   // 'lock'(캡스락) | 'once'(다음 한 글자만 대문자) | 'off'(소문자)
-  engOneShot: true,       // true면 원워드 모드: 소문자 전용, 스페이스/엔터 입력 시 자동으로 파카하라 복귀
-  engWordBuffer: '',      // 원워드 모드에서 지금까지 입력한 글자(약어 자동 보정 판별용)
 };
-
-// 자동 보정(원워드 모드에서 스페이스/엔터로 단어를 확정하며 일어남)을 되돌리기 위한 정보.
-// 자동 보정 직후 딱 한 번, 삭제키가 Undo로 동작하도록 한다.
-let pendingUndo = null; // { raw, corrected, delim } | null
 
 const editor = document.getElementById('editor');
 function getText() { return editor.dataset.text || ''; }
@@ -211,7 +205,6 @@ function independentActive() {
 }
 
 function handleConsonant(root) {
-  pendingUndo = null;
   appendText(root);
   state.activeRoot = root; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
@@ -220,7 +213,6 @@ function handleConsonant(root) {
 }
 
 function handleNext() {
-  pendingUndo = null;
   if (independentActive()) {
     if (state.lastSignKey === 'K' && state.signIndepMode) { return; } // 'अ' 하나뿐, 재입력 없음
     const t = getText();
@@ -241,7 +233,6 @@ function handleNext() {
 }
 
 function handleVowelKey(def) {
-  pendingUndo = null;
   const isIndep = independentActive();
   // 독립모음 모드에서는 독립모음 한 바퀴를 다 돈 다음 의존모음 한 바퀴, 다시 독립모음 순으로 순환한다
   const chars = isIndep ? (def.indep ? def.indep.concat(def.chars) : def.chars) : def.chars;
@@ -276,7 +267,6 @@ function punctSeq(id, idx) {
 // 이 키들은 입력 후 항상 끝에 공란을 하나 붙여두고, 같은 키를 다시 누르면
 // 직전에 붙인 "부호+공란"을 지우고 다음 부호+공란으로 교체한다.
 function handlePunctKey(def) {
-  pendingUndo = null;
   if (state.lastSignKey === def.id && state.signIndepMode) {
     const prevStr = punctSeq(def.id, state.signTapIdx);
     const t = getText();
@@ -294,34 +284,18 @@ function handlePunctKey(def) {
   render();
 }
 
-function syncActiveRootFromText() {
+function handleBS() {
+  backspace();
+  state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
   const t = getText();
   const last = t.length ? t[t.length - 1] : null;
   const root = last ? getRootOf(last) : null;
   state.activeRoot = root;
   state.activeCharIdx = root ? consonantGroups[root].indexOf(last) : 0;
-}
-
-// 직전 입력이 원워드 모드의 약어 자동 보정이었다면, 삭제키를 누르는 순간 한 글자를
-// 지우는 대신 보정 자체를 되돌린다(iOS류 자동수정 취소와 같은 관례). 이 되돌리기는
-// 한 번만 유효하고, 그다음부터 삭제키는 다시 평범한 한 글자 삭제로 동작한다.
-function handleBS() {
-  state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
-  if (pendingUndo) {
-    const { raw, corrected, delim } = pendingUndo;
-    pendingUndo = null;
-    const t = getText();
-    const suffix = corrected + delim;
-    if (t.endsWith(suffix)) setText(t.slice(0, -suffix.length) + raw + delim);
-  } else {
-    backspace();
-  }
-  syncActiveRootFromText();
   render();
 }
 
 function handleSpace() {
-  pendingUndo = null;
   appendText(' ');
   state.activeRoot = null; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
@@ -330,7 +304,6 @@ function handleSpace() {
 }
 
 function handleEnter() {
-  pendingUndo = null;
   appendText('\n');
   state.activeRoot = null; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
@@ -362,49 +335,6 @@ const ENG_BOT = {
   num:   { left:1.29,  width:19.30 },
   space: { left:22.93, width:54.27 },
   enter: { left:79.46, width:19.12 },
-};
-
-// 원워드 모드 자동 보정용 약어 사전: 소문자로 입력한 그대로가 key, 스페이스/엔터로
-// 단어를 확정하는 순간 이 표에 있으면 정식 표기로 치환한다.
-// (이 데모 쿼티에는 숫자·공백·& 키가 없어 b2b, m&m, pvt ltd 같은 항목은 애초에
-// 입력할 수 없으므로 사전에서 제외했다.)
-const ABBR_MAP = {
-  "aadhaar": "Aadhaar", "aai": "AAI", "aap": "AAP", "ac": "AC", "afaik": "AFAIK",
-  "ai": "AI", "aiims": "AIIMS", "aka": "AKA", "am": "AM", "api": "API",
-  "app": "App", "asap": "ASAP", "atm": "ATM", "ba": "BA", "bcc": "BCC",
-  "bhashini": "BHASHINI", "bjp": "BJP", "brb": "BRB", "bsc": "BSc", "bse": "BSE",
-  "bsnl": "BSNL", "btech": "BTech", "btw": "BTW", "cag": "CAG", "cagr": "CAGR",
-  "cat": "CAT", "cbi": "CBI", "cbse": "CBSE", "cc": "CC", "cctv": "CCTV",
-  "cd": "CD", "ceo": "CEO", "cfo": "CFO", "cibil": "CIBIL", "cin": "CIN",
-  "clat": "CLAT", "cm": "CM", "coo": "COO", "cpct": "CPCT", "cr": "Cr",
-  "csir": "CSIR", "cto": "CTO", "cvc": "CVC", "da": "DA", "diy": "DIY",
-  "dm": "DM", "drdo": "DRDO", "dvd": "DVD", "emi": "EMI", "eod": "EOD",
-  "epic": "EPIC", "eta": "ETA", "faq": "FAQ", "fd": "FD", "fdi": "FDI",
-  "fir": "FIR", "frro": "FRRO", "fyi": "FYI", "gate": "GATE", "gdp": "GDP",
-  "gp": "GP", "gps": "GPS", "gst": "GST", "gta": "GTA", "hcl": "HCL",
-  "hr": "HR", "hra": "HRA", "ias": "IAS", "icse": "ICSE", "id": "ID",
-  "idk": "IDK", "ifms": "IFMS", "ifs": "IFS", "ifsc": "IFSC", "iim": "IIM",
-  "iit": "IIT", "imho": "IMHO", "imo": "IMO", "inc": "INC", "infy": "Infy",
-  "iot": "IoT", "ip": "IP", "ips": "IPS", "irctc": "IRCTC", "irda": "IRDA",
-  "irs": "IRS", "isro": "ISRO", "jee": "JEE", "kg": "Kg", "km": "Km",
-  "kmc": "KMC", "kmda": "KMDA", "kpi": "KPI", "kra": "KRA", "kyc": "KYC",
-  "lcd": "LCD", "led": "LED", "lic": "LIC", "llp": "LLP", "lol": "LOL",
-  "lpa": "LPA", "ltd": "Ltd", "ma": "MA", "mat": "MAT", "mba": "MBA",
-  "meity": "MeitY", "mf": "MF", "mla": "MLA", "mlc": "MLC", "mp": "MP",
-  "msc": "MSc", "msme": "MSME", "mtech": "MTech", "neet": "NEET", "neft": "NEFT",
-  "ngo": "NGO", "nhai": "NHAI", "nit": "NIT", "np": "NP", "npa": "NPA",
-  "nps": "NPS", "nri": "NRI", "nse": "NSE", "obc": "OBC", "omg": "OMG",
-  "os": "OS", "otp": "OTP", "pan": "PAN", "pdf": "PDF", "pf": "PF",
-  "phd": "PhD", "pin": "PIN", "pio": "PIO", "pls": "PLS", "plz": "PLZ",
-  "pm": "PM", "pnr": "PNR", "ppf": "PPF", "pto": "PTO", "raw": "RAW",
-  "rbi": "RBI", "rd": "RD", "re": "RE", "rip": "RIP", "roc": "RoC",
-  "roi": "ROI", "rrb": "RRB", "rsvp": "RSVP", "rtgs": "RTGS", "rto": "RTO",
-  "rwa": "RWA", "sc": "SC", "sdm": "SDM", "sebi": "SEBI", "sho": "SHO",
-  "sip": "SIP", "sme": "SME", "sms": "SMS", "ssc": "SSC", "st": "ST",
-  "std": "STD", "ta": "TA", "tbh": "TBH", "tcs": "TCS", "tds": "TDS",
-  "thx": "THX", "tin": "TIN", "ttyl": "TTYL", "tv": "TV", "ui": "UI",
-  "upi": "UPI", "upsc": "UPSC", "url": "URL", "usb": "USB", "ux": "UX",
-  "wfh": "WFH", "wifi": "WiFi",
 };
 
 // 키 입력 확정을 누르는 순간(pointerdown)이 아니라 떼는 순간(pointerup)으로 미룬다.
@@ -453,11 +383,8 @@ function makeLetterBtn(ch, style, onClick) {
 // ── 영문 모드 진입/이탈 (한 손가락 상하 스와이프, 방향 무관 토글) ──
 function enterEnglishMode() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
-  pendingUndo = null;
   state.engActive = true;
-  state.engShiftState = 'off'; // 원워드 모드는 항상 소문자로 시작
-  state.engOneShot = true;
-  state.engWordBuffer = '';
+  state.engShiftState = 'off'; // 영문은 소문자로 시작(대문자보다 쓸 일이 훨씬 많음)
   state.activeRoot = null; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
   state.independentMode = false;
@@ -469,7 +396,6 @@ function exitEnglishMode() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
   state.engActive = false;
   state.engShiftState = 'off';
-  state.engOneShot = true;
   document.getElementById('kbd-image').src = 'images/keyboard.png';
   render();
 }
@@ -479,75 +405,37 @@ function toggleEnglishMode() {
 }
 
 function handleEngLetter(ch) {
-  const out = state.engShiftState === 'off' ? ch.toLowerCase() : ch.toUpperCase();
-  appendText(out);
-  if (state.engOneShot) state.engWordBuffer += ch.toLowerCase();
+  appendText(state.engShiftState === 'off' ? ch.toLowerCase() : ch.toUpperCase());
   if (state.engShiftState === 'once') state.engShiftState = 'off';
   render();
 }
 
-// 원워드 모드에서 스페이스/엔터로 단어를 확정할 때 약어 사전과 대조해 자동 보정한다.
-// 보정이 일어나면 되돌리기 정보를 pendingUndo에 남기고 파카하라로 복귀한다.
-// delim(스페이스/개행)은 그대로 살려 뒤에 붙인다 — 새로 추가하는 공백이 아니라
-// 사용자가 원래 친 그 키 자체다.
-function finishEngWord(delim) {
-  if (!state.engOneShot) { appendText(delim); render(); return; }
-  const word = state.engWordBuffer;
-  appendText(delim);
-  const canonical = word ? ABBR_MAP[word] : null;
-  if (canonical) {
-    const t = getText();
-    const suffix = word + delim;
-    if (t.endsWith(suffix)) setText(t.slice(0, -suffix.length) + canonical + delim);
-    pendingUndo = { raw: word, corrected: canonical, delim };
-  } else {
-    pendingUndo = null;
-  }
-  exitEnglishMode();
-}
-
-function handleEngSpace() { finishEngWord(' '); }
-
-// 스페이스 키 영역에서 위로 플릭했을 때: "공란 삽입(필요하면) + 모드 전환"을 한 동작으로 처리.
-// - 파카하라에서: 공란을 넣고 원워드 모드로 진입(영문 삽입 전 흔히 필요한 공란을 매번 따로
-//   치고 스와이프까지 두 번 조작할 필요가 없게).
-// - 원워드 모드에서: 스페이스 키 자체가 이미 공란+약어보정+복귀를 한 번에 하므로 그대로 위임.
-// - 일반 영문 모드(시프트로 진입)에서: 스페이스 키만으로는 복귀가 안 되므로(여러 단어를 계속
-//   치기 위해 모드를 유지해야 함), 여기서 공란을 넣고 명시적으로 파카하라로 복귀시켜준다.
-function handleSpaceSwipe() {
-  const t = getText();
-  const needsSpace = t.length > 0 && !t.endsWith(' ') && !t.endsWith('\n');
-  if (state.engActive) {
-    if (state.engOneShot) {
-      handleEngSpace();
-    } else {
-      if (needsSpace) appendText(' ');
-      exitEnglishMode();
-    }
-  } else {
-    if (needsSpace) appendText(' ');
-    enterEnglishMode();
-  }
-}
+function handleEngSpace() { appendText(' '); render(); }
 
 function handleEngBackspace() {
   backspace();
-  if (state.engOneShot && state.engWordBuffer) state.engWordBuffer = state.engWordBuffer.slice(0, -1);
   render();
 }
 
-function handleEngEnter() { finishEngWord('\n'); }
+function handleEngEnter() { appendText('\n'); render(); }
+
+// 스페이스 키 영역에서 위로 플릭했을 때: "공란 삽입(필요하면) + 모드 전환"을 한 동작으로
+// 처리한다. 파카하라에서 치면 공란을 넣고 영문 모드로, 영문 모드에서 치면 공란을 넣고
+// 파카하라로 — 스페이스 키 단순 탭으로는 절대 모드가 바뀌지 않으니(이탈 의사는 늘
+// 스와이프로만 확인) 여러 단어를 계속 이어 쳐도 안심하고 스페이스만 눌러도 된다.
+function handleSpaceSwipe() {
+  const t = getText();
+  const needsSpace = t.length > 0 && !t.endsWith(' ') && !t.endsWith('\n');
+  if (needsSpace) appendText(' ');
+  toggleEnglishMode();
+}
 
 // 시프트: 더블탭=캡스락 토글(다른 폰 키보드와 동일 관례), 싱글탭=임시 대문자 1글자.
-// 원워드 모드 중에 시프트가 눌리면 무조건 일반 영문 모드로 확정 전환한다 — 약어는
-// 이미 자동으로 대문자 보정되므로, 사용자가 직접 시프트를 누른다는 건 원워드가 아닌
-// 일반 입력을 원한다는 뜻으로 본다.
 // 더블탭 여부는 두 번째 탭이 실제로 오는지 지켜봐야 하므로, 첫 탭은 타이머로 유예한 뒤
 // 유예 시간 안에 두 번째 탭이 오면 그 시점에 취소하고 토글로 대체한다(사후 시간차 비교 방식은
 // 첫 탭에서 싱글 동작이 이미 실행돼버려 더블탭 시 엉뚱하게 겹쳐 적용되는 버그가 있었음).
 let shiftTapTimer = null;
 function handleShiftTap() {
-  state.engOneShot = false;
   if (shiftTapTimer) {
     clearTimeout(shiftTapTimer);
     shiftTapTimer = null;
@@ -758,12 +646,11 @@ function renderDevanagari() {
 
 function resetAll() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
-  pendingUndo = null;
   kbdGestureActive = false; // 혹시 제스처 추적이 꼬여 키 입력이 막혀 있었더라도 리셋으로는 항상 풀리도록
   setText('');
   state = {
     activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false,
-    engActive:false, engShiftState:'off', engOneShot:true, engWordBuffer:'',
+    engActive:false, engShiftState:'off',
   };
   document.getElementById('kbd-image').src = 'images/keyboard.png';
   render();
