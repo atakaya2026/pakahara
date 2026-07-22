@@ -50,6 +50,7 @@
     border-top: 1px solid #888;
     background: #b5b0a8;
     touch-action: none; /* 브라우저 기본 핀치줌/패닝을 막고 제스처를 JS가 전담 처리 */
+    cursor: ns-resize; /* PC에서 마우스로도 상하 스와이프(드래그)가 가능함을 알림 */
   }
   #kbd-image { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
   #kbd { position: absolute; top: 0; left: 0; right: 0; bottom: 0; touch-action: none; }
@@ -178,9 +179,14 @@ let state = {
   independentMode: false,
   // 영문(로마자) 모드 상태
   engActive: false,       // true면 쿼티 자판 표시 중
-  engShiftState: 'lock',  // 'lock'(캡스락) | 'once'(다음 한 글자만 대문자) | 'off'(소문자)
-  engOneShot: true,       // true면 스페이스 입력 시 자동으로 파카하라 복귀
+  engShiftState: 'off',   // 'lock'(캡스락) | 'once'(다음 한 글자만 대문자) | 'off'(소문자)
+  engOneShot: true,       // true면 원워드 모드: 소문자 전용, 스페이스/엔터 입력 시 자동으로 파카하라 복귀
+  engWordBuffer: '',      // 원워드 모드에서 지금까지 입력한 글자(약어 자동 보정 판별용)
 };
+
+// 자동 보정(원워드 모드에서 스페이스/엔터로 단어를 확정하며 일어남)을 되돌리기 위한 정보.
+// 자동 보정 직후 딱 한 번, 삭제키가 Undo로 동작하도록 한다.
+let pendingUndo = null; // { raw, corrected, delim } | null
 
 const editor = document.getElementById('editor');
 function getText() { return editor.dataset.text || ''; }
@@ -205,6 +211,7 @@ function independentActive() {
 }
 
 function handleConsonant(root) {
+  pendingUndo = null;
   appendText(root);
   state.activeRoot = root; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
@@ -213,6 +220,7 @@ function handleConsonant(root) {
 }
 
 function handleNext() {
+  pendingUndo = null;
   if (independentActive()) {
     if (state.lastSignKey === 'K' && state.signIndepMode) { return; } // 'अ' 하나뿐, 재입력 없음
     const t = getText();
@@ -233,6 +241,7 @@ function handleNext() {
 }
 
 function handleVowelKey(def) {
+  pendingUndo = null;
   const isIndep = independentActive();
   // 독립모음 모드에서는 독립모음 한 바퀴를 다 돈 다음 의존모음 한 바퀴, 다시 독립모음 순으로 순환한다
   const chars = isIndep ? (def.indep ? def.indep.concat(def.chars) : def.chars) : def.chars;
@@ -267,6 +276,7 @@ function punctSeq(id, idx) {
 // 이 키들은 입력 후 항상 끝에 공란을 하나 붙여두고, 같은 키를 다시 누르면
 // 직전에 붙인 "부호+공란"을 지우고 다음 부호+공란으로 교체한다.
 function handlePunctKey(def) {
+  pendingUndo = null;
   if (state.lastSignKey === def.id && state.signIndepMode) {
     const prevStr = punctSeq(def.id, state.signTapIdx);
     const t = getText();
@@ -284,18 +294,34 @@ function handlePunctKey(def) {
   render();
 }
 
-function handleBS() {
-  backspace();
-  state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
+function syncActiveRootFromText() {
   const t = getText();
   const last = t.length ? t[t.length - 1] : null;
   const root = last ? getRootOf(last) : null;
   state.activeRoot = root;
   state.activeCharIdx = root ? consonantGroups[root].indexOf(last) : 0;
+}
+
+// 직전 입력이 원워드 모드의 약어 자동 보정이었다면, 삭제키를 누르는 순간 한 글자를
+// 지우는 대신 보정 자체를 되돌린다(iOS류 자동수정 취소와 같은 관례). 이 되돌리기는
+// 한 번만 유효하고, 그다음부터 삭제키는 다시 평범한 한 글자 삭제로 동작한다.
+function handleBS() {
+  state.lastSignKey = null; state.signTapIdx = 0; state.independentMode = false;
+  if (pendingUndo) {
+    const { raw, corrected, delim } = pendingUndo;
+    pendingUndo = null;
+    const t = getText();
+    const suffix = corrected + delim;
+    if (t.endsWith(suffix)) setText(t.slice(0, -suffix.length) + raw + delim);
+  } else {
+    backspace();
+  }
+  syncActiveRootFromText();
   render();
 }
 
 function handleSpace() {
+  pendingUndo = null;
   appendText(' ');
   state.activeRoot = null; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
@@ -304,6 +330,7 @@ function handleSpace() {
 }
 
 function handleEnter() {
+  pendingUndo = null;
   appendText('\n');
   state.activeRoot = null; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
@@ -337,25 +364,77 @@ const ENG_BOT = {
   enter: { left:79.46, width:19.12 },
 };
 
-// 두 손가락 제스처 도중 닿은 손가락이 키 입력으로 잘못 찍히는 것을 막기 위한 장치.
-// 손가락이 닿는 순간 바로 입력을 확정하지 않고 GESTURE_GUARD_MS만큼 유예했다가,
-// 그 사이에 실제 핀치/스프레드 "움직임"이 감지되면 입력을 취소한다.
-// 주의: 단순히 손가락이 2개 겹쳐 닿은 것만으로는 켜지 않는다 — 빠르게 연타할 때
-// (특히 양손 엄지로 번갈아 칠 때) 이전 손가락이 떼기 전에 다음 손가락이 눌리는
-// 겹침이 흔히 발생하는데, 이걸 전부 제스처로 오인하면 정상 타이핑이 자꾸 씹힌다.
-// kbdMultiTouchActive는 initPinchGesture의 touchmove에서 실제 거리 변화가
-// 임계치를 넘을 때만 true가 된다.
-const GESTURE_GUARD_MS = 70;
-let kbdMultiTouchActive = false;
+// 원워드 모드 자동 보정용 약어 사전: 소문자로 입력한 그대로가 key, 스페이스/엔터로
+// 단어를 확정하는 순간 이 표에 있으면 정식 표기로 치환한다.
+// (이 데모 쿼티에는 숫자·공백·& 키가 없어 b2b, m&m, pvt ltd 같은 항목은 애초에
+// 입력할 수 없으므로 사전에서 제외했다.)
+const ABBR_MAP = {
+  "aadhaar": "Aadhaar", "aai": "AAI", "aap": "AAP", "ac": "AC", "afaik": "AFAIK",
+  "ai": "AI", "aiims": "AIIMS", "aka": "AKA", "am": "AM", "api": "API",
+  "app": "App", "asap": "ASAP", "atm": "ATM", "ba": "BA", "bcc": "BCC",
+  "bhashini": "BHASHINI", "bjp": "BJP", "brb": "BRB", "bsc": "BSc", "bse": "BSE",
+  "bsnl": "BSNL", "btech": "BTech", "btw": "BTW", "cag": "CAG", "cagr": "CAGR",
+  "cat": "CAT", "cbi": "CBI", "cbse": "CBSE", "cc": "CC", "cctv": "CCTV",
+  "cd": "CD", "ceo": "CEO", "cfo": "CFO", "cibil": "CIBIL", "cin": "CIN",
+  "clat": "CLAT", "cm": "CM", "coo": "COO", "cpct": "CPCT", "cr": "Cr",
+  "csir": "CSIR", "cto": "CTO", "cvc": "CVC", "da": "DA", "diy": "DIY",
+  "dm": "DM", "drdo": "DRDO", "dvd": "DVD", "emi": "EMI", "eod": "EOD",
+  "epic": "EPIC", "eta": "ETA", "faq": "FAQ", "fd": "FD", "fdi": "FDI",
+  "fir": "FIR", "frro": "FRRO", "fyi": "FYI", "gate": "GATE", "gdp": "GDP",
+  "gp": "GP", "gps": "GPS", "gst": "GST", "gta": "GTA", "hcl": "HCL",
+  "hr": "HR", "hra": "HRA", "ias": "IAS", "icse": "ICSE", "id": "ID",
+  "idk": "IDK", "ifms": "IFMS", "ifs": "IFS", "ifsc": "IFSC", "iim": "IIM",
+  "iit": "IIT", "imho": "IMHO", "imo": "IMO", "inc": "INC", "infy": "Infy",
+  "iot": "IoT", "ip": "IP", "ips": "IPS", "irctc": "IRCTC", "irda": "IRDA",
+  "irs": "IRS", "isro": "ISRO", "jee": "JEE", "kg": "Kg", "km": "Km",
+  "kmc": "KMC", "kmda": "KMDA", "kpi": "KPI", "kra": "KRA", "kyc": "KYC",
+  "lcd": "LCD", "led": "LED", "lic": "LIC", "llp": "LLP", "lol": "LOL",
+  "lpa": "LPA", "ltd": "Ltd", "ma": "MA", "mat": "MAT", "mba": "MBA",
+  "meity": "MeitY", "mf": "MF", "mla": "MLA", "mlc": "MLC", "mp": "MP",
+  "msc": "MSc", "msme": "MSME", "mtech": "MTech", "neet": "NEET", "neft": "NEFT",
+  "ngo": "NGO", "nhai": "NHAI", "nit": "NIT", "np": "NP", "npa": "NPA",
+  "nps": "NPS", "nri": "NRI", "nse": "NSE", "obc": "OBC", "omg": "OMG",
+  "os": "OS", "otp": "OTP", "pan": "PAN", "pdf": "PDF", "pf": "PF",
+  "phd": "PhD", "pin": "PIN", "pio": "PIO", "pls": "PLS", "plz": "PLZ",
+  "pm": "PM", "pnr": "PNR", "ppf": "PPF", "pto": "PTO", "raw": "RAW",
+  "rbi": "RBI", "rd": "RD", "re": "RE", "rip": "RIP", "roc": "RoC",
+  "roi": "ROI", "rrb": "RRB", "rsvp": "RSVP", "rtgs": "RTGS", "rto": "RTO",
+  "rwa": "RWA", "sc": "SC", "sdm": "SDM", "sebi": "SEBI", "sho": "SHO",
+  "sip": "SIP", "sme": "SME", "sms": "SMS", "ssc": "SSC", "st": "ST",
+  "std": "STD", "ta": "TA", "tbh": "TBH", "tcs": "TCS", "tds": "TDS",
+  "thx": "THX", "tin": "TIN", "ttyl": "TTYL", "tv": "TV", "ui": "UI",
+  "upi": "UPI", "upsc": "UPSC", "url": "URL", "usb": "USB", "ux": "UX",
+  "wfh": "WFH", "wifi": "WiFi",
+};
+
+// 키 입력 확정을 누르는 순간(pointerdown)이 아니라 떼는 순간(pointerup)으로 미룬다.
+// 예전엔 pointerdown 후 고정 시간(70ms)만 유예하고 그 사이 스와이프 움직임이 있었는지로
+// 판단했는데, 마우스로 천천히 스와이프하면 임계 거리(28px)에 도달하기 전에 그 유예 시간이
+// 끝나버려 스와이프 시작 지점의 키가 그대로 입력돼버리는 경쟁 상태가 있었다. pointerup
+// 시점엔 스와이프가 실제로 발동했는지(kbdGestureActive)가 이미 확정돼 있으므로 이 경쟁이
+// 원천적으로 생기지 않는다. 같은 손가락(pointerId)이 눌렀다 뗀 경우에만 반응한다 —
+// 스와이프로 자리를 옮겨 다른 키 위에서 손을 떼도 그 키가 잘못 눌리지 않도록.
+let kbdGestureActive = false;
 
 function makeBtn(cls, style, onClick) {
   const b = document.createElement('button');
   b.className = 'kbd-btn ' + cls;
   Object.assign(b.style, style);
-  if (onClick) b.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    setTimeout(() => { if (!kbdMultiTouchActive) onClick(); }, GESTURE_GUARD_MS);
-  });
+  if (onClick) {
+    let downPointerId = null;
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      downPointerId = e.pointerId;
+    });
+    b.addEventListener('pointerup', (e) => {
+      if (e.pointerId !== downPointerId) return;
+      downPointerId = null;
+      if (!kbdGestureActive) onClick();
+    });
+    b.addEventListener('pointercancel', (e) => {
+      if (e.pointerId === downPointerId) downPointerId = null;
+    });
+  }
   return b;
 }
 
@@ -368,12 +447,14 @@ function makeLetterBtn(ch, style, onClick) {
   return b;
 }
 
-// ── 영문 모드 진입/이탈 (두 손가락으로 펼치기/좁히기) ──
+// ── 영문 모드 진입/이탈 (한 손가락 상하 스와이프, 방향 무관 토글) ──
 function enterEnglishMode() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
+  pendingUndo = null;
   state.engActive = true;
-  state.engShiftState = 'lock';
+  state.engShiftState = 'off'; // 원워드 모드는 항상 소문자로 시작
   state.engOneShot = true;
+  state.engWordBuffer = '';
   state.activeRoot = null; state.activeCharIdx = 0;
   state.lastSignKey = null; state.signTapIdx = 0;
   state.independentMode = false;
@@ -384,42 +465,64 @@ function enterEnglishMode() {
 function exitEnglishMode() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
   state.engActive = false;
-  state.engShiftState = 'lock';
+  state.engShiftState = 'off';
   state.engOneShot = true;
   document.getElementById('kbd-image').src = 'images/keyboard.png';
   render();
 }
 
+function toggleEnglishMode() {
+  if (state.engActive) exitEnglishMode(); else enterEnglishMode();
+}
+
 function handleEngLetter(ch) {
-  appendText(state.engShiftState === 'off' ? ch.toLowerCase() : ch.toUpperCase());
+  const out = state.engShiftState === 'off' ? ch.toLowerCase() : ch.toUpperCase();
+  appendText(out);
+  if (state.engOneShot) state.engWordBuffer += ch.toLowerCase();
   if (state.engShiftState === 'once') state.engShiftState = 'off';
   render();
 }
 
-function handleEngSpace() {
-  appendText(' ');
-  if (state.engOneShot) { exitEnglishMode(); return; }
-  render();
+// 원워드 모드에서 스페이스/엔터로 단어를 확정할 때 약어 사전과 대조해 자동 보정한다.
+// 보정이 일어나면 되돌리기 정보를 pendingUndo에 남기고 파카하라로 복귀한다.
+// delim(스페이스/개행)은 그대로 살려 뒤에 붙인다 — 새로 추가하는 공백이 아니라
+// 사용자가 원래 친 그 키 자체다.
+function finishEngWord(delim) {
+  if (!state.engOneShot) { appendText(delim); render(); return; }
+  const word = state.engWordBuffer;
+  appendText(delim);
+  const canonical = word ? ABBR_MAP[word] : null;
+  if (canonical) {
+    const t = getText();
+    const suffix = word + delim;
+    if (t.endsWith(suffix)) setText(t.slice(0, -suffix.length) + canonical + delim);
+    pendingUndo = { raw: word, corrected: canonical, delim };
+  } else {
+    pendingUndo = null;
+  }
+  exitEnglishMode();
 }
+
+function handleEngSpace() { finishEngWord(' '); }
 
 function handleEngBackspace() {
   backspace();
+  if (state.engOneShot && state.engWordBuffer) state.engWordBuffer = state.engWordBuffer.slice(0, -1);
   render();
 }
 
-function handleEngEnter() {
-  appendText('\n');
-  if (state.engOneShot) { exitEnglishMode(); return; }
-  render();
-}
+function handleEngEnter() { finishEngWord('\n'); }
 
-// 시프트: 더블탭=캡스락 토글(다른 폰 키보드와 동일 관례), 싱글탭=임시 대문자 1글자
-// 단, 최초 진입 직후(캡스락+일회성)에는 싱글탭 한 번으로 락과 일회성을 모두 해제한다
+// 시프트: 더블탭=캡스락 토글(다른 폰 키보드와 동일 관례), 싱글탭=임시 대문자 1글자.
+// 원워드 모드 중에 시프트가 눌리면 무조건 일반 영문 모드로 확정 전환한다 — 약어는
+// 이미 자동으로 대문자 보정되므로, 사용자가 직접 시프트를 누른다는 건 원워드가 아닌
+// 일반 입력을 원한다는 뜻으로 본다.
 // 더블탭 여부는 두 번째 탭이 실제로 오는지 지켜봐야 하므로, 첫 탭은 타이머로 유예한 뒤
 // 유예 시간 안에 두 번째 탭이 오면 그 시점에 취소하고 토글로 대체한다(사후 시간차 비교 방식은
 // 첫 탭에서 싱글 동작이 이미 실행돼버려 더블탭 시 엉뚱하게 겹쳐 적용되는 버그가 있었음).
 let shiftTapTimer = null;
 function handleShiftTap() {
+  state.engOneShot = false;
   if (shiftTapTimer) {
     clearTimeout(shiftTapTimer);
     shiftTapTimer = null;
@@ -429,14 +532,7 @@ function handleShiftTap() {
   }
   shiftTapTimer = setTimeout(() => {
     shiftTapTimer = null;
-    if (state.engShiftState === 'lock') {
-      state.engShiftState = 'off';
-      state.engOneShot = false;
-    } else if (state.engShiftState === 'once') {
-      state.engShiftState = 'off';
-    } else {
-      state.engShiftState = 'once';
-    }
+    state.engShiftState = state.engShiftState === 'off' ? 'once' : 'off';
     render();
   }, 300);
 }
@@ -484,54 +580,45 @@ function renderEng() {
   }, handleEngEnter));
 }
 
-// ── 두 손가락 펼치기/좁히기 제스처로 영문 ↔ 파카하라 전환 ──
-(function initPinchGesture() {
+// ── 한 손가락 상하 스와이프로 영문 ↔ 파카하라 토글 ──
+// 예전엔 두 손가락 펼치기/좁히기였는데, 실제로 써보니 오므릴 때 양쪽 엄지가
+// 부딪히고, 펼치기/좁히기를 매번 구분해야 하는 게 습관상 잘 안 맞아 항상 펼치는
+// 손짓만 하게 되는 문제가 있었다. 그래서 방향에 상관없이 세로로 스치기만 하면
+// 같은 토글 동작(진입/이탈 모두)을 하도록 단순화했다.
+// 이제 한 지점(포인터 1개)만 있으면 되므로 터치 전용 이벤트 대신 Pointer Events를
+// 쓴다 — 폰 터치와 PC 마우스 드래그를 같은 코드로 함께 지원하기 위함(PC에서도
+// 마우스로 클릭+세로 드래그하면 테스트 가능).
+(function initSwipeGesture() {
   const wrap = document.getElementById('keyboard-wrap');
-  let startDist = null;
-  let triggered = false;
+  let activePointerId = null;
+  let startX = null, startY = null, triggered = false;
+  const SWIPE_MIN_PX = 28;       // 최소 이동 거리
+  const SWIPE_V_H_RATIO = 1.3;   // 수직 이동이 수평 이동보다 이 배 이상이어야 스와이프로 인정(대각선 오조작 방지)
 
-  function dist(touches) {
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.hypot(dx, dy);
-  }
+  wrap.addEventListener('pointerdown', (e) => {
+    if (activePointerId !== null) return; // 이미 다른 포인터를 추적 중이면 무시(오조작 방지)
+    activePointerId = e.pointerId;
+    startX = e.clientX; startY = e.clientY;
+    triggered = false;
+  });
 
-  // 네이티브 핀치줌이 같이 발동하면 제스처 이후에도 화면이 확대된 채로 남으므로,
-  // 두 손가락이 닿아 있는 동안은 확실히 preventDefault로 막는다(touch-action:none과 이중 방어).
-  wrap.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      startDist = dist(e.touches);
-      triggered = false;
-    }
-  }, { passive: false });
-
-  // kbdMultiTouchActive는 여기, 실제 두 점 사이 거리가 GESTURE_MOVE_RATIO 이상
-  // 벌어지거나 좁혀졌을 때만 켠다(단순히 손가락 2개가 닿아만 있는 상태는 제외).
-  // 한 번 켜지면 이 2터치 세션이 끝날 때까지 유지한다(중간에 거리가 다시 원위치에
-  // 가까워져도 꺼지지 않음 — 이미 제스처로 확정된 세션이 도중에 스치듯 흔들렸다고
-  // 다시 일반 탭 취급하면 안 되므로).
-  const GESTURE_MOVE_RATIO = 0.06;
-  wrap.addEventListener('touchmove', (e) => {
-    if (e.touches.length !== 2 || startDist == null) return;
-    e.preventDefault();
-    const ratio = dist(e.touches) / startDist;
-    if (Math.abs(ratio - 1) > GESTURE_MOVE_RATIO) kbdMultiTouchActive = true;
-    if (triggered) return;
-    if (ratio > 1.15) {
-      triggered = true;
-      if (!state.engActive) enterEnglishMode();
-    } else if (ratio < 0.85) {
-      triggered = true;
-      if (state.engActive) exitEnglishMode();
-    }
-  }, { passive: false });
+  wrap.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== activePointerId || startX == null || triggered) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (Math.abs(dy) < SWIPE_MIN_PX) return;
+    if (Math.abs(dy) < Math.abs(dx) * SWIPE_V_H_RATIO) return;
+    triggered = true;
+    kbdGestureActive = true;
+    toggleEnglishMode();
+  });
 
   function endGesture(e) {
-    if (e.touches.length < 2) { startDist = null; triggered = false; kbdMultiTouchActive = false; }
+    if (e.pointerId !== activePointerId) return;
+    activePointerId = null; startX = null; startY = null; triggered = false; kbdGestureActive = false;
   }
-  wrap.addEventListener('touchend', endGesture);
-  wrap.addEventListener('touchcancel', endGesture);
+  wrap.addEventListener('pointerup', endGesture);
+  wrap.addEventListener('pointercancel', endGesture);
 })();
 
 function render() {
@@ -620,10 +707,11 @@ function renderDevanagari() {
 
 function resetAll() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
+  pendingUndo = null;
   setText('');
   state = {
     activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false,
-    engActive:false, engShiftState:'lock', engOneShot:true,
+    engActive:false, engShiftState:'off', engOneShot:true, engWordBuffer:'',
   };
   document.getElementById('kbd-image').src = 'images/keyboard.png';
   render();
