@@ -508,6 +508,28 @@ function finishEngWord(delim) {
 
 function handleEngSpace() { finishEngWord(' '); }
 
+// 스페이스 키 영역에서 위로 플릭했을 때: "공란 삽입(필요하면) + 모드 전환"을 한 동작으로 처리.
+// - 파카하라에서: 공란을 넣고 원워드 모드로 진입(영문 삽입 전 흔히 필요한 공란을 매번 따로
+//   치고 스와이프까지 두 번 조작할 필요가 없게).
+// - 원워드 모드에서: 스페이스 키 자체가 이미 공란+약어보정+복귀를 한 번에 하므로 그대로 위임.
+// - 일반 영문 모드(시프트로 진입)에서: 스페이스 키만으로는 복귀가 안 되므로(여러 단어를 계속
+//   치기 위해 모드를 유지해야 함), 여기서 공란을 넣고 명시적으로 파카하라로 복귀시켜준다.
+function handleSpaceSwipe() {
+  const t = getText();
+  const needsSpace = t.length > 0 && !t.endsWith(' ') && !t.endsWith('\n');
+  if (state.engActive) {
+    if (state.engOneShot) {
+      handleEngSpace();
+    } else {
+      if (needsSpace) appendText(' ');
+      exitEnglishMode();
+    }
+  } else {
+    if (needsSpace) appendText(' ');
+    enterEnglishMode();
+  }
+}
+
 function handleEngBackspace() {
   backspace();
   if (state.engOneShot && state.engWordBuffer) state.engWordBuffer = state.engWordBuffer.slice(0, -1);
@@ -591,18 +613,37 @@ function renderEng() {
 // 이제 한 지점(포인터 1개)만 있으면 되므로 터치 전용 이벤트 대신 Pointer Events를
 // 쓴다 — 폰 터치와 PC 마우스 드래그를 같은 코드로 함께 지원하기 위함(PC에서도
 // 마우스로 클릭+세로 드래그하면 테스트 가능).
+//
+// 스페이스 키 영역에서 시작한 스와이프는 예외적으로 취급한다: 위로 플릭하면
+// "공란 삽입 + 모드 전환"을 한 번에 처리한다(handleSpaceSwipe). 원래 영문을 끼워
+// 넣으려면 공란 입력 따로, 모드 전환 스와이프 따로 — 두 번 조작해야 했는데 이걸
+// 합친 것. 단, 방향은 위쪽만 인정한다 — 스페이스 키가 화면 맨 아래라 아래쪽으로
+// 움직일 여유 공간이 거의 없어서, 자칫 평범한 스페이스 탭을 아래쪽 스와이프로
+// 오인할 위험이 있기 때문(어차피 스페이스 쪽으로 간 손가락은 다시 위로 올라오게
+// 되어 있으므로 위쪽만 인정해도 잃는 기능은 없다).
 (function initSwipeGesture() {
   const wrap = document.getElementById('keyboard-wrap');
   let activePointerId = null;
-  let startX = null, startY = null, triggered = false;
+  let startX = null, startY = null, triggered = false, startedOnSpace = false;
   const SWIPE_MIN_PX = 28;       // 최소 이동 거리
   const SWIPE_V_H_RATIO = 1.3;   // 수직 이동이 수평 이동보다 이 배 이상이어야 스와이프로 인정(대각선 오조작 방지)
+
+  function isOnSpaceKey(clientX, clientY) {
+    const r = wrap.getBoundingClientRect();
+    const px = (clientX - r.left) / r.width * 100;
+    const py = (clientY - r.top) / r.height * 100;
+    const sp = state.engActive
+      ? { x0: ENG_BOT.space.left, x1: ENG_BOT.space.left + ENG_BOT.space.width, y0: ENG_BOT_Y, y1: ENG_BOT_Y + ENG_BOT_H }
+      : { x0: BOT_SECTIONS.space[0], x1: BOT_SECTIONS.space[1], y0: BOT_Y, y1: BOT_Y + BOT_H };
+    return px >= sp.x0 && px <= sp.x1 && py >= sp.y0 && py <= sp.y1;
+  }
 
   wrap.addEventListener('pointerdown', (e) => {
     if (activePointerId !== null) return; // 이미 다른 포인터를 추적 중이면 무시(오조작 방지)
     activePointerId = e.pointerId;
     startX = e.clientX; startY = e.clientY;
     triggered = false;
+    startedOnSpace = isOnSpaceKey(e.clientX, e.clientY);
   });
 
   wrap.addEventListener('pointermove', (e) => {
@@ -611,6 +652,7 @@ function renderEng() {
     const dy = e.clientY - startY;
     if (Math.abs(dy) < SWIPE_MIN_PX) return;
     if (Math.abs(dy) < Math.abs(dx) * SWIPE_V_H_RATIO) return;
+    if (startedOnSpace && dy > 0) return; // 스페이스 키에서는 아래쪽 움직임은 스와이프로 치지 않음
     triggered = true;
     kbdGestureActive = true;
     // 스와이프가 확정된 순간 이 포인터를 wrap이 강제로 붙잡는다. 이게 없으면
@@ -618,13 +660,13 @@ function renderEng() {
     // wrap까지 전달되지 않아 kbdGestureActive가 true로 영원히 걸려버리고, 그 순간부터
     // 모든 키 입력이 무시되는 "먹통" 상태가 됐었다.
     try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
-    toggleEnglishMode();
+    if (startedOnSpace) handleSpaceSwipe(); else toggleEnglishMode();
   });
 
   function endGesture(e) {
     if (e.pointerId !== activePointerId) return;
     try { wrap.releasePointerCapture(e.pointerId); } catch (err) {}
-    activePointerId = null; startX = null; startY = null; triggered = false; kbdGestureActive = false;
+    activePointerId = null; startX = null; startY = null; triggered = false; startedOnSpace = false; kbdGestureActive = false;
   }
   wrap.addEventListener('pointerup', endGesture);
   wrap.addEventListener('pointercancel', endGesture);
