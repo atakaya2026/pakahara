@@ -612,8 +612,13 @@ function exitEnglishMode() {
   render();
 }
 
+// 숫자판이 떠 있는 동안의 중앙 스와이프는 "언어를 바꾸겠다"는 의도로 보기 어렵다 —
+// 숫자판 진입 전이 힌디였든 영문이었든, 유저는 그냥 숫자판에서 빠져나가고 싶은
+// 것뿐이지 굳이 반대 언어로 넘어가고 싶은 게 아니다(그러길 원했다면 애초에 우측
+// 스와이프로 들어왔을 것). 그래서 숫자판 위에서는 우측 스와이프와 완전히 동일하게
+// "진입 전 모드로 복귀"만 하고, 언어 자체를 뒤집지는 않는다.
 function toggleEnglishMode() {
-  numericMode = false; // 언어 전환은 숫자판 위에서 걸려도 항상 숫자판을 닫고 글자판으로 돌아간다
+  if (numericMode) { handleNumDismiss(); return; }
   if (state.engActive) exitEnglishMode(); else enterEnglishMode();
 }
 
