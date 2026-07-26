@@ -122,32 +122,28 @@
   .kbd-space-label .sp-part.dark { color: #1a1208; }
   .kbd-space-label .sp-part.gray { color: #9a9488; }
 
-  /* 도움말 오버레이 */
+  /* 도움말: help.png 한 장에 3분할 스와이프 안내가 다 그려져 있어, 제목+이미지+확인
+     버튼만 얹는 단순한 카드로 충분하다. */
   #help-overlay {
     position: absolute; inset: 0; z-index: 50;
     background: rgba(0,0,0,0.6);
     display: none;
     align-items: center; justify-content: center;
-    padding: 24px;
+    padding: 5%;
   }
   #help-overlay.show { display: flex; }
   #help-card {
-    background: #faf7f2; color: #1a1208; border-radius: 12px;
-    padding: 20px 22px; max-width: 380px; width: 100%;
+    background: #faf7f2; border-radius: 14px;
+    padding: 5% 5% 6%; width: 100%;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    text-align: center;
   }
-  #help-card h2 { font-size: 17px; margin-bottom: 14px; color: #1a3a2a; }
-  #help-card .help-row { display: flex; gap: 10px; margin-bottom: 12px; font-size: 14px; line-height: 1.5; }
-  #help-card .help-zone {
-    flex-shrink: 0; width: 48px; text-align: center; font-weight: 700;
-    color: #fff; border-radius: 6px; padding: 4px 2px; font-size: 12px; align-self: flex-start;
-  }
-  #help-card .help-zone.left { background: #3a6b1f; }
-  #help-card .help-zone.center { background: #00838f; }
-  #help-card .help-zone.right { background: #b45309; }
-  #help-card button.help-close {
-    margin-top: 8px; width: 100%; padding: 11px; border: none; border-radius: 8px;
-    background: #4caf80; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer;
+  #help-title { font-size: clamp(16px, 5.4vw, 21px); font-weight: 900; color: #1a1208; margin-bottom: 4%; }
+  #help-card img { width: 100%; height: auto; display: block; margin-bottom: 5%; }
+  #help-close {
+    padding: 2.6% 12%; border: none; border-radius: 10px;
+    background: #22c55e; color: #fff; font-weight: 700;
+    font-size: clamp(14px, 4.6vw, 19px); cursor: pointer;
   }
 
 </style>
@@ -165,11 +161,9 @@
 </div>
 <div id="help-overlay">
   <div id="help-card">
-    <h2>간편 모드 전환 안내</h2>
-    <div class="help-row"><span class="help-zone left">좌측 1/3</span><span>상하 스와이프 = 시프트. 1회는 다음 한 글자만 대문자, 2회 연속 스와이프는 시프트락(그 상태에서 1회 더 스와이프하면 해제)</span></div>
-    <div class="help-row"><span class="help-zone center">중앙 1/3</span><span>상하 스와이프 = 힌디 ↔ 영문 전환</span></div>
-    <div class="help-row"><span class="help-zone right">우측 1/3</span><span>상하 스와이프 = 숫자/기호 자판으로 전환 (자판의 닫기 키로 복귀)</span></div>
-    <button class="help-close" onclick="hideHelp()">확인</button>
+    <div id="help-title">स्वाइप करके आसानी से मोड बदलें</div>
+    <img src="images/help.png" alt="swipe zones guide" />
+    <button id="help-close" onclick="hideHelp()">ठीक है</button>
   </div>
 </div>
 </div>
@@ -237,6 +231,10 @@ let numericMode = false;
 let lastNonNumericMode = false; // 숫자판 진입 직전 상태: false=파카하라, true=영문
 let numLastKey = null;
 let numTapIdx = 0;
+
+// 좌측 1/3 스와이프로 들어가는 "약어 모드"(영문 대문자 고정) 진입 직전 상태 스냅샷.
+// 다시 좌측 스와이프하면 이 스냅샷으로 되돌아간다(숫자판 토글과 같은 패턴).
+let beforeShortform = null;
 
 const editor = document.getElementById('editor');
 function getText() { return editor.dataset.text || ''; }
@@ -594,12 +592,36 @@ function handleShiftTap() {
   }, 300);
 }
 
-// 시프트 스와이프: 시간차 없이 스와이프 횟수 자체로만 순환한다(off→once→lock→off…).
-// 1회는 다음 한 글자만 대문자, 2회 연속이면 잠금, 잠긴 상태에서 1회 더 하면 해제.
-function handleShiftSwipe() {
-  state.engShiftState = state.engShiftState === 'off' ? 'once'
-                       : state.engShiftState === 'once' ? 'lock'
-                       : 'off';
+// 좌측 1/3 스와이프 = "약어 모드" 토글. 힌디/영문/숫자 어느 모드에 있든 상관없이
+// 곧장 영문 대문자(시프트락) 상태로 보낸다 — 인도에서 약어를 대문자로 쓰는 관행을
+// 반영해 "영문 모드"와는 별개 개념으로 취급한다(실제로는 engActive+lock 상태일 뿐).
+// 이미 약어 모드라면 진입 직전 상태로 되돌아간다(숫자판 닫기와 같은 패턴).
+// 약어 모드 안에서 대문자를 풀고 싶으면 물리 시프트키를 그대로 쓰면 된다(기존 handleShiftTap).
+function isShortformActive() {
+  return !numericMode && state.engActive && state.engShiftState === 'lock';
+}
+
+function toggleShortformMode() {
+  if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
+  if (isShortformActive()) {
+    if (beforeShortform) {
+      numericMode = beforeShortform.numericMode;
+      state.engActive = beforeShortform.engActive;
+      state.engShiftState = beforeShortform.engShiftState;
+      beforeShortform = null;
+    } else {
+      numericMode = false; state.engActive = false; state.engShiftState = 'off';
+    }
+  } else {
+    beforeShortform = { numericMode, engActive: state.engActive, engShiftState: state.engShiftState };
+    numericMode = false;
+    state.engActive = true;
+    state.engShiftState = 'lock';
+    state.activeRoot = null; state.activeCharIdx = 0;
+    state.lastSignKey = null; state.signTapIdx = 0;
+    state.independentMode = false;
+  }
+  document.getElementById('kbd-image').src = state.engActive ? 'images/keyboard_eng.png' : 'images/keyboard.png';
   render();
 }
 
@@ -647,14 +669,14 @@ function renderEng() {
 }
 
 // ── 간편 모드 전환: 자판 영역을 좌/중/우 1/3로 나눠 각 구역의 상하 스와이프에
-// 서로 다른 동작을 배정한다 (좌: 시프트, 중앙: 힌디↔영문, 우: 숫자/기호).
+// 서로 다른 동작을 배정한다 (좌: 약어 모드, 중앙: 힌디↔영문, 우: 숫자/기호).
 // 방향은 상관없이 세로로 일정 거리 이상 스치면 발동하는 건 예전 방식 그대로다.
 // 이제 한 지점(포인터 1개)만 있으면 되므로 터치 전용 이벤트 대신 Pointer Events를
 // 쓴다 — 폰 터치와 PC 마우스 드래그를 같은 코드로 함께 지원하기 위함(PC에서도
 // 마우스로 클릭+세로 드래그하면 테스트 가능).
-// 세 구역 모두 파카하라/영문/숫자 어느 자판 위에서든 항상 똑같이 동작한다.
-// 단 시프트(좌측)는 실제로 영문 글자판이 떠 있을 때만 의미가 있다 — 파카하라나
-// 숫자판에는 대소문자 개념이 없으므로 그 두 경우엔 그냥 아무 일도 일어나지 않는다.
+// 세 구역 모두 파카하라/영문/숫자 어느 자판 위에서든 항상 똑같이 동작하는 "모드 전환"
+// 스위치다 — 각자 목표 모드로 곧장 보내고, 이미 그 모드라면 토글로 진입 직전 상태로
+// 되돌린다(좌: 약어 모드, 우: 숫자판과 동일한 패턴).
 (function initSwipeGesture() {
   const wrap = document.getElementById('keyboard-wrap');
   let activePointerId = null;
@@ -691,7 +713,7 @@ function renderEng() {
     // wrap까지 전달되지 않아 kbdGestureActive가 true로 영원히 걸려버리고, 그 순간부터
     // 모든 키 입력이 무시되는 "먹통" 상태가 됐었다.
     try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
-    if (zone === 'left') { if (state.engActive && !numericMode) handleShiftSwipe(); }
+    if (zone === 'left') toggleShortformMode();
     else if (zone === 'center') toggleEnglishMode();
     else toggleNumericMode();
   });
@@ -847,6 +869,7 @@ function resetAll() {
     engActive:false, engShiftState:'off',
   };
   numericMode = false; lastNonNumericMode = false; numLastKey = null; numTapIdx = 0;
+  beforeShortform = null;
   document.getElementById('kbd-image').src = 'images/keyboard.png';
   render();
 }
