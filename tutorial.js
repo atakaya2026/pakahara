@@ -69,7 +69,7 @@ function setProgress(n) {
 
 // 문구가 뜨자마자 엄지/화살표가 같이 나오면 아직 문구도 다 못 읽었는데 리듬이 어색해서,
 // 문구를 먼저 보여주고 한 박자 쉬었다가 엄지 스와이프나 키 화살표를 보여준다.
-const READ_DELAY_MS = 1100;
+const READ_DELAY_MS = 2000;
 let thumbTimer = null;
 
 function showZoneStep(zone, text) {
