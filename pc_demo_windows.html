@@ -175,9 +175,9 @@
 
 <div class="kbd-area">
   <div class="mnemonic-text">
-    <p><span class="hl">ब</span>ड़ी <span class="hl">दि</span>क्कत <span class="hl">स</span>च, <span class="hl">न</span>ई <span class="hl">चा</span>हिए</p>
-    <p><span class="hl">पाकाहारा</span> <span class="hl">डा</span>लो</p>
-    <p><span class="hl">गु</span>र <span class="hl">जा</span>नो, <span class="hl">तो</span> <span class="hl">म</span>ज़ा <span class="hl">टा</span>इपिंग</p>
+    <p><span class="hl">बे</span>हतर <span class="hl">दि</span>शा, <span class="hl">त</span>था <span class="hl">न</span>वाचार <span class="hl">चा</span>हिए</p>
+    <p><span class="hl">पाकाहारा</span> <span class="hl">डा</span>उनलोड करो! </p>
+    <p><span class="hl">ग</span>ज <span class="hl">जा</span>गा, <span class="hl">स</span>च <span class="hl">में</span> <span class="hl">टॉ</span>प है!</p>
   </div>
   <div class="baby-guide-container">
     <div class="keyboard-pc" id="kbd">
@@ -221,12 +221,12 @@ const rowDefs = [
   [
     { key:'q', col:1, type:'consonant', root:'ब' },
     { key:'w', col:2, type:'consonant', root:'द' },
-    { key:'e', col:3, type:'consonant', root:'स' },
+    { key:'e', col:3, type:'consonant', root:'त' },
     { key:'r', col:4, type:'consonant', root:'न' },
     { key:'t', col:5, type:'consonant', root:'च' },
     { key:'_sp1', type:'spacer' },
     { key:'y', col:6, type:'empty' },
-    { key:'u', col:7, type:'sign', chars:['ं','ँ'], id:'r0c0', indepGrow:'mark', indepLabel:['?','!'] },
+    { key:'u', col:7, type:'sign', chars:['ं','ँ'], indep:['₹','卐'], id:'r0c0' },
     { key:'i', col:8, type:'sign', chars:['े','ै'], indep:['ए','ऐ'], id:'r0c1' },
     { key:'o', col:9, type:'sign', chars:['ो','ौ'], indep:['ओ','औ'], id:'r0c2' },
     { key:'p', col:10, type:'empty' },
@@ -246,11 +246,11 @@ const rowDefs = [
   [
     { key:'z', col:1, type:'consonant', root:'ग' },
     { key:'x', col:2, type:'consonant', root:'ज' },
-    { key:'c', col:3, type:'consonant', root:'त' },
+    { key:'c', col:3, type:'consonant', root:'स' },
     { key:'v', col:4, type:'consonant', root:'म' },
     { key:'b', col:5, type:'consonant', root:'ट' },
     { key:'_sp3', type:'spacer' },
-    { key:'n', col:6, type:'sign', chars:['्','़'], id:'r2c0', indepGrow:'period', indepLabel:[',','.'] },
+    { key:'n', col:6, type:'sign', chars:['्','़'], indep:['ॐ','卍'], id:'r2c0' },
     { key:'m', col:7, type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'], id:'r2c1' },
   ],
   [
@@ -316,38 +316,33 @@ function handleNext() {
   updateKbdUI();
 }
 
-// 독립모음 모드에서 u/n 키는 의존 부호 대신 문장부호를 낸다.
-// u: ? - ! - ?? - !! - ??? - !!! - ???? - ... (상한 없이 계속 늘어남)
-// n: , - . - .. - ... - .... - ... (마침표는 상한 없이 계속 늘어남)
-function punctSeq(id, idx) {
-  if (id === 'r0c0') { const n = Math.floor(idx / 2) + 1; return (idx % 2 === 0 ? '?' : '!').repeat(n); }
-  if (id === 'r2c0') { return idx === 0 ? ',' : '.'.repeat(idx); }
-  return '';
+// PC는 물리 마침표(.) 키가 이미 있으므로, 모바일처럼 화면에 전용 키를 새로 그릴
+// 필요 없이 그 물리 키 입력을 바로 여기로 연결한다. ।(1탭) - ॥(2탭) - ...(3탭)로
+// 순서대로 입력되고, 그 뒤로는 점이 하나씩 계속 늘어난다(상한 없음).
+function dandaSeq(idx) {
+  if (idx === 0) return '।';
+  if (idx === 1) return '॥';
+  return '.'.repeat(idx + 1);
 }
 
-// 이 키들은 입력 후 항상 끝에 공란을 하나 붙여두고, 같은 키를 다시 누르면
-// 직전에 붙인 "부호+공란"을 지우고 다음 부호+공란으로 교체한다.
-function handlePunctKey(def) {
-  if (state.lastSignKey === def.id && state.signIndepMode) {
-    const prevStr = punctSeq(def.id, state.signTapIdx);
+function handleDanda() {
+  if (state.lastSignKey === 'DANDA') {
+    const prev = dandaSeq(state.signTapIdx);
     const t = getText();
-    setText(t.slice(0, -(prevStr.length + 1)));
+    setText(t.slice(0, -prev.length));
     state.signTapIdx += 1;
-    appendText(punctSeq(def.id, state.signTapIdx) + ' ');
+    appendText(dandaSeq(state.signTapIdx));
   } else {
-    const t = getText();
-    if (t.endsWith(' ')) setText(t.slice(0, -1));
-    appendText(punctSeq(def.id, 0) + ' ');
-    state.independentMode = true;
-    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = true;
+    appendText(dandaSeq(0));
+    state.lastSignKey = 'DANDA'; state.signTapIdx = 0; state.signIndepMode = false;
   }
   state.activeRoot = null; state.activeCharIdx = 0;
+  state.independentMode = false;
   updateKbdUI();
 }
 
 function handleVowelKey(def) {
   const isIndep = independentActive();
-  if (isIndep && def.indepGrow) { handlePunctKey(def); return; }
   // 독립모음 모드에서는 독립모음 한 바퀴를 다 돈 다음 의존모음 한 바퀴, 다시 독립모음 순으로 순환한다
   const chars = isIndep ? (def.indep ? def.indep.concat(def.chars) : def.chars) : def.chars;
 
@@ -434,6 +429,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'backspace') { handleBS(); editor.scrollTop = editor.scrollHeight; return; }
   if (k === 'enter')     { handleEnter(); editor.scrollTop = editor.scrollHeight; return; }
   if (k === ' ')         { handleSpace(); editor.scrollTop = editor.scrollHeight; return; }
+  if (k === '.')         { handleDanda(); editor.scrollTop = editor.scrollHeight; return; }
 
   const def = keyLookup[k];
   if (!def || def.type === 'empty') return;
@@ -519,8 +515,8 @@ function updateKbdUI() {
     if (def.type !== 'sign') return;
     const el = document.getElementById(`key-${def.key}`);
     if (!el) return;
-    const chars = isIndep && def.indepGrow ? def.indepLabel : (isIndep ? (def.indep || def.chars) : def.chars);
-    el.classList.toggle('independent', isIndep && (!!def.indep || !!def.indepGrow));
+    const chars = isIndep ? (def.indep || def.chars) : def.chars;
+    el.classList.toggle('independent', isIndep && !!def.indep);
     el.textContent = chars.map(c => isDiacritic(c) ? '◌'+c : c).join(' ');
   }));
 }

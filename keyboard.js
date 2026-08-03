@@ -18,16 +18,16 @@ const consonantGroups = {
 };
 
 const leftKeys = [
-  ['ब','द','स','न','च'],
+  ['ब','द','त','न','च'],
   ['प','क','ह','र','ड'],
-  ['ग','ज','त','म','ट'],
+  ['ग','ज','स','म','ट'],
 ];
 
 // 다음키(K, 홈로우 우측 중지 위치)를 중심으로 상/하/좌/우/대각선에 배치되는 모음·부호키
 // indep: 독립모음 모드일 때 대체 표시/입력되는 문자 (없으면 chars 그대로 유지)
 const rightKeys = [
   [
-    { id:'U', type:'sign', chars:['ं','ँ'], indepGrow:'mark', indepLabel:['?','!'] },
+    { id:'U', type:'sign', chars:['ं','ँ'], indep:['₹','卐'] },
     { id:'I', type:'sign', chars:['े','ै'], indep:['ए','ऐ'] },
     { id:'O', type:'sign', chars:['ो','ौ'], indep:['ओ','औ'] },
   ],
@@ -37,7 +37,7 @@ const rightKeys = [
     { id:'L', type:'sign', chars:['ा','ी','ः'], indep:['आ','ई'] },
   ],
   [
-    { id:'N', type:'sign', chars:['्','़'], indepGrow:'period', indepLabel:[',','.'] },
+    { id:'N', type:'sign', chars:['्','़'], indep:['ॐ','卍'] },
     { id:'M', type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'] },
     { id:'BS', type:'bs' },
   ],
@@ -150,32 +150,29 @@ function handleVowelKey(def) {
   render();
 }
 
-// 독립모음 모드에서 U(1행6열)·N(3행6열) 키는 의존 부호 대신 문장부호를 낸다.
-// U: ? - ! - ?? - !! - ??? - !!! - ???? - ... (상한 없이 계속 늘어남)
-// N: , - . - .. - ... - .... - ... (마침표는 상한 없이 계속 늘어남)
-function punctSeq(id, idx) {
-  if (id === 'U') { const n = Math.floor(idx / 2) + 1; return (idx % 2 === 0 ? '?' : '!').repeat(n); }
-  if (id === 'N') { return idx === 0 ? ',' : '.'.repeat(idx); }
-  return '';
+// ● 키(스페이스와 엔터 사이): 다이렉트로 단다(।)/이중단다(॥)/줄임표(...)를 순환
+// 입력한다. 3연타부터는 점을 하나씩 계속 추가한다(상한 없음). 독립모음 모드와
+// 무관하게 항상 같은 동작이며, 다른 키를 누르면(lastSignKey가 바뀌면) 처음부터
+// 다시 시작한다.
+function dandaSeq(idx) {
+  if (idx === 0) return '।';
+  if (idx === 1) return '॥';
+  return '.'.repeat(idx + 1);
 }
 
-// 이 키들은 입력 후 항상 끝에 공란을 하나 붙여두고, 같은 키를 다시 누르면
-// 직전에 붙인 "부호+공란"을 지우고 다음 부호+공란으로 교체한다.
-function handlePunctKey(def) {
-  if (state.lastSignKey === def.id && state.signIndepMode) {
-    const prevStr = punctSeq(def.id, state.signTapIdx);
+function handleDanda() {
+  if (state.lastSignKey === 'DANDA') {
+    const prev = dandaSeq(state.signTapIdx);
     const t = getText();
-    setText(t.slice(0, -(prevStr.length + 1)));
+    setText(t.slice(0, -prev.length));
     state.signTapIdx += 1;
-    appendText(punctSeq(def.id, state.signTapIdx) + ' ');
+    appendText(dandaSeq(state.signTapIdx));
   } else {
-    const t = getText();
-    if (t.endsWith(' ')) setText(t.slice(0, -1));
-    appendText(punctSeq(def.id, 0) + ' ');
-    state.independentMode = true;
-    state.lastSignKey = def.id; state.signTapIdx = 0; state.signIndepMode = true;
+    appendText(dandaSeq(0));
+    state.lastSignKey = 'DANDA'; state.signTapIdx = 0; state.signIndepMode = false;
   }
   state.activeRoot = null; state.activeCharIdx = 0;
+  state.independentMode = false;
   render();
 }
 
@@ -318,8 +315,9 @@ function handleNumDismiss() {
 const KEY_COLS = [1.55, 14.00, 26.39, 38.78, 51.16, 63.62, 76.14, 88.60];
 const KEY_ROWS = [3.09, 27.89, 52.44];
 const KEY_W = 9.53, KEY_H = 19.97;
-const BOT_Y = 77.12, BOT_H = 19.92;
-const BOT_SECTIONS = { num:[0.92,26.04], space:[26.04,73.82], enter:[73.82,98.94] };
+const BOT_Y = 76.94, BOT_H = 19.84;
+// 스페이스와 엔터 사이에 danda(।/॥/...) 전용 키가 새로 추가되면서 하단바가 4칸이 됨
+const BOT_SECTIONS = { num:[1.18,21.13], space:[23.20,65.17], danda:[67.01,77.76], enter:[79.60,98.90] };
 
 // ── 영문(쿼티) 자판 좌표 (images/keyboard_eng.png 2176×1182 실측 기준 %) ──
 const ENG_ROW_TOP = [2.45, 27.50, 52.54];
@@ -358,8 +356,8 @@ function expandAxisHitboxes(starts, sizes, total = 100) {
 const HIT_COLS = expandAxisHitboxes(KEY_COLS, KEY_COLS.map(() => KEY_W));
 const HIT_ROWS = expandAxisHitboxes([...KEY_ROWS, BOT_Y], [KEY_H, KEY_H, KEY_H, BOT_H]);
 const HIT_BOT_SECTIONS = expandAxisHitboxes(
-  [BOT_SECTIONS.num[0], BOT_SECTIONS.space[0], BOT_SECTIONS.enter[0]],
-  [BOT_SECTIONS.num[1] - BOT_SECTIONS.num[0], BOT_SECTIONS.space[1] - BOT_SECTIONS.space[0], BOT_SECTIONS.enter[1] - BOT_SECTIONS.enter[0]]
+  [BOT_SECTIONS.num[0], BOT_SECTIONS.space[0], BOT_SECTIONS.danda[0], BOT_SECTIONS.enter[0]],
+  [BOT_SECTIONS.num[1] - BOT_SECTIONS.num[0], BOT_SECTIONS.space[1] - BOT_SECTIONS.space[0], BOT_SECTIONS.danda[1] - BOT_SECTIONS.danda[0], BOT_SECTIONS.enter[1] - BOT_SECTIONS.enter[0]]
 );
 
 // 영문 자판 히트박스 (행마다 칸 폭이 달라서 행별로 따로 계산)
@@ -384,26 +382,67 @@ const ENG_HIT_BOT = expandAxisHitboxes(
 // 스와이프로 자리를 옮겨 다른 키 위에서 손을 떼도 그 키가 잘못 눌리지 않도록.
 let kbdGestureActive = false;
 
-function makeBtn(cls, style, onClick) {
+// 첫 실행 튜토리얼이 스와이프 존 동작을 가로챌 때 쓰는 훅. tutorial.js가 설정한다.
+// (zone, defaultFn) => 튜토리얼이 그 존을 기대하고 있으면 defaultFn()을 실행해 실제
+// 모드를 바꾸고, 아닌 존이면 defaultFn()을 호출하지 않아 모드 전환 자체를 막는다.
+// 튜토리얼이 비활성 상태면 항상 null이라 평소처럼 defaultFn()이 그대로 실행된다.
+let zoneSwipeInterceptor = null;
+// 자모 조합 튜토리얼 단계에서 render() 직후 진행 상황을 확인할 때 쓰는 훅.
+let onTutorialRender = null;
+
+// 롱프레스 안내: 자음키(→다음키 안내)/부호키(→멀티탭 안내)에서 손가락을 떼지 않고
+// 오래 누르고 있으면 팝업으로 올바른 조작법을 짚어준다. 교육 없이 바로 써보게 했을 때
+// 요즘 유저들은 한 키에 여러 문자가 있으면 반사적으로 롱프레스부터 시도하는 경향이
+// 확인되어 추가함. 스페이스처럼 매 입력마다 걸리는 동작이 아니라 유저가 헷갈릴 때만
+// 드물게 시도하는 제스처라 노출 빈도를 제한할 필요는 없다 — 매번 보여준다. 롱프레스여도
+// 손을 떼면(pointerup) 원래 탭 동작은 그대로 실행된다(안내는 부가 정보일 뿐 입력을 막지 않음).
+const LONG_PRESS_MS = 500;
+const LONGPRESS_HINT_CONSONANT = 'दाईं ओर वाला तीर का बटन दबाएं।';
+const LONGPRESS_HINT_SIGN = 'बार-बार टैप करें।';
+let longPressToastTimer = null;
+// 손가락이 자음/부호키 위에서 눌린 채로 시작해 스와이프로 이어지면, 그 키의 롱프레스
+// 타이머가 스와이프와 무관하게 계속 돌고 있다가 500ms를 넘기는 순간 "롱프레스" 안내
+// 팝업을 띄워버렸다(스와이프 자체가 손을 500ms 넘게 붙이고 있는 동작이라 흔히 걸림).
+// initSwipeGesture가 스와이프를 확정하는 순간 이 콜백으로 그 키의 타이머를 꺼서 막는다.
+let pendingLongPressCancel = null;
+function showLongPressHint(text) {
+  const el = document.getElementById('longpress-toast');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  if (longPressToastTimer) clearTimeout(longPressToastTimer);
+  longPressToastTimer = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+function makeBtn(cls, style, onClick, longPressText) {
   const b = document.createElement('button');
   b.className = 'kbd-btn ' + cls;
   Object.assign(b.style, style);
   if (onClick) {
     let downPointerId = null;
+    let longPressTimer = null;
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       downPointerId = e.pointerId;
       // 손가락이 살짝 흔들려 이웃 키 쪽으로 pointerup이 잡혀도 이 키가 눌린 걸로
       // 인식하도록 포인터를 붙잡아둔다(캡처해도 wrap까지의 버블링은 그대로 유지됨).
       try { b.setPointerCapture(e.pointerId); } catch (err) {}
+      if (longPressText) {
+        longPressTimer = setTimeout(() => { longPressTimer = null; showLongPressHint(longPressText); }, LONG_PRESS_MS);
+        pendingLongPressCancel = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
+      }
     });
     b.addEventListener('pointerup', (e) => {
       if (e.pointerId !== downPointerId) return;
       downPointerId = null;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      pendingLongPressCancel = null;
       if (!kbdGestureActive) onClick();
     });
     b.addEventListener('pointercancel', (e) => {
       if (e.pointerId === downPointerId) downPointerId = null;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      pendingLongPressCancel = null;
     });
   }
   return b;
@@ -641,15 +680,23 @@ function renderEng() {
     if (Math.abs(dy) < Math.abs(dx) * SWIPE_V_H_RATIO) return;
     triggered = true;
     kbdGestureActive = true;
+    // 이 스와이프가 시작된 키에 걸려 있던 롱프레스 타이머를 꺼서, 손을 오래 붙이고
+    // 있는 스와이프가 "롱프레스" 안내 팝업으로 오인되지 않게 한다.
+    if (pendingLongPressCancel) { pendingLongPressCancel(); pendingLongPressCancel = null; }
     // 스와이프가 확정된 순간 이 포인터를 wrap이 강제로 붙잡는다. 이게 없으면
     // 손가락이 wrap 밖(예: 바로 위 입력창)으로 빠져나간 채로 손을 뗄 때 pointerup이
     // wrap까지 전달되지 않아 kbdGestureActive가 true로 영원히 걸려버리고, 그 순간부터
     // 모든 키 입력이 무시되는 "먹통" 상태가 됐었다.
     try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
-    if (zone === 'left') toggleShortformMode();
-    else if (zone === 'center') toggleEnglishMode();
-    else toggleNumericMode();
+    if (zone === 'left') runZoneAction('left', toggleShortformMode);
+    else if (zone === 'center') runZoneAction('center', toggleEnglishMode);
+    else runZoneAction('right', toggleNumericMode);
   });
+
+  function runZoneAction(zone, fn) {
+    if (zoneSwipeInterceptor) zoneSwipeInterceptor(zone, fn);
+    else fn();
+  }
 
   function endGesture(e) {
     if (e.pointerId !== activePointerId) return;
@@ -661,9 +708,10 @@ function renderEng() {
 })();
 
 function render() {
-  if (numericMode) { renderNumeric(); return; }
-  if (state.engActive) { renderEng(); return; }
-  renderDevanagari();
+  if (numericMode) { renderNumeric(); }
+  else if (state.engActive) { renderEng(); }
+  else { renderDevanagari(); }
+  if (onTutorialRender) onTutorialRender();
 }
 
 function renderNumeric() {
@@ -698,9 +746,6 @@ function renderNumeric() {
     }
   }
 }
-
-function showHelp() { document.getElementById('help-overlay').classList.add('show'); }
-function hideHelp() { document.getElementById('help-overlay').classList.remove('show'); }
 
 // ── 상용구(즐겨찾기) 패널 ──────────────────────────────────────────────
 // fav.png 실측(1356×750) 기준 % 좌표. 9칸(3x3) + 하단 가운데 넓은 칸 1개 = 10개.
@@ -789,7 +834,7 @@ function renderDevanagari() {
       const root = leftKeys[row][col];
       kbd.appendChild(makeBtn('kbd-cons', {
         left: HIT_COLS[col].start + '%', top: HIT_ROWS[row].start + '%', width: HIT_COLS[col].size + '%', height: HIT_ROWS[row].size + '%'
-      }, () => handleConsonant(root)));
+      }, () => handleConsonant(root), LONGPRESS_HINT_CONSONANT));
     }
 
     for (let col = 0; col < 3; col++) {
@@ -816,32 +861,20 @@ function renderDevanagari() {
         kbd.appendChild(makeBtn('kbd-bs', style, handleBS));
 
       } else if (rk.type === 'sign') {
-        if (isIndep && rk.indepGrow) {
-          const chars = rk.indepLabel;
-          const cls = 'kbd-label count-' + chars.length + ' independent';
-          const b = makeBtn(cls, style, () => handlePunctKey(rk));
-          chars.forEach(ch => {
-            const sp = document.createElement('span');
-            sp.className = 'label-item'; sp.textContent = ch;
-            b.appendChild(sp);
-          });
-          kbd.appendChild(b);
-        } else {
-          const chars = isIndep ? (rk.indep || rk.chars) : rk.chars;
-          const cls = 'kbd-label count-' + chars.length + (isIndep && rk.indep ? ' independent' : '');
-          const b = makeBtn(cls, style, () => handleVowelKey(rk));
-          chars.forEach(ch => {
-            const sp = document.createElement('span');
-            sp.className = 'label-item'; sp.textContent = ch;
-            b.appendChild(sp);
-          });
-          kbd.appendChild(b);
-        }
+        const chars = isIndep ? (rk.indep || rk.chars) : rk.chars;
+        const cls = 'kbd-label count-' + chars.length + (isIndep && rk.indep ? ' independent' : '');
+        const b = makeBtn(cls, style, () => handleVowelKey(rk), LONGPRESS_HINT_SIGN);
+        chars.forEach(ch => {
+          const sp = document.createElement('span');
+          sp.className = 'label-item'; sp.textContent = ch;
+          b.appendChild(sp);
+        });
+        kbd.appendChild(b);
       }
     }
   }
 
-  // 하단바: ☆(→상용구) | 스페이스/스와 | 엔터
+  // 하단바: ☆(→상용구) | 스페이스/스와 | ●(단다) | 엔터
   const botRow = HIT_ROWS[3];
   kbd.appendChild(makeBtn('kbd-123', {
     left: HIT_BOT_SECTIONS[0].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[0].size + '%', height: botRow.size + '%'
@@ -863,8 +896,23 @@ function renderDevanagari() {
   spaceLabel.appendChild(spWord); spaceLabel.appendChild(slash); spaceLabel.appendChild(svWord);
   kbd.appendChild(spaceLabel);
 
-  kbd.appendChild(makeBtn('kbd-enter', {
+  // danda(।/॥/...) 키: 이미지가 공란이라 라벨을 직접 그린다. 다음키(K)와 같은 원칙으로
+  // "방금 입력된 것"이 아니라 "다음 탭에서 입력될 것"을 미리 보여준다 — 기본(안 누른
+  // 상태)은 다음 탭이 ।이므로 ।, 한 번 누른 뒤에는 다음 탭이 ॥이므로 ॥, 두 번 누른
+  // 뒤에는 다음 탭이 세 점(...)째로 들어가므로 …, 세 번 이상 누른 뒤에는 계속 점만
+  // 하나씩 늘어나므로 점(.) 하나로 고정 표시한다.
+  const dandaNextIdx = state.lastSignKey === 'DANDA' ? state.signTapIdx + 1 : 0;
+  const dandaCh = dandaNextIdx === 0 ? '।' : dandaNextIdx === 1 ? '॥' : dandaNextIdx === 2 ? '…' : '.';
+  const dandaBtn = makeBtn('kbd-label count-1', {
     left: HIT_BOT_SECTIONS[2].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[2].size + '%', height: botRow.size + '%'
+  }, handleDanda);
+  const dandaSp = document.createElement('span');
+  dandaSp.className = 'label-item'; dandaSp.textContent = dandaCh;
+  dandaBtn.appendChild(dandaSp);
+  kbd.appendChild(dandaBtn);
+
+  kbd.appendChild(makeBtn('kbd-enter', {
+    left: HIT_BOT_SECTIONS[3].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[3].size + '%', height: botRow.size + '%'
   }, handleEnter));
 }
 
