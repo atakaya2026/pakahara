@@ -140,12 +140,14 @@ html, body {
 
 /* 진행형 튜토리얼: 화살표(스와이프 존/키 안내)는 키보드 영역 위에 얹히는 레이어에
    남아 있지만, 배너(진행바+문구)는 실제 제품이라면 불가능해도 이 데모에서는 입력창
-   중간으로 옮겨뒀다 — 안내를 읽으면서 동시에 입력 결과도 눈에 들어오게 하기 위함.
+   안으로 옮겨뒀다 — 안내를 읽으면서 동시에 입력 결과도 눈에 들어오게 하기 위함.
+   배너는 키보드 바로 위에 고정해서 "문구를 읽고 바로 아래 키보드로 손을 움직이는"
+   동선이 짧아지게 했고, 데모 글상자는 그 배너 위(더 잘 보이는 자리)에 띄운다.
    키 입력/스크롤은 그대로 통과해야 하므로 둘 다 pointer-events:none으로 둔다. */
 #tutorial-layer { position: absolute; inset: 0; z-index: 35; pointer-events: none; }
 
 #tutorial-banner {
-  position: absolute; left: 5%; right: 5%; top: 36%;
+  position: absolute; left: 5%; right: 5%; bottom: 4%;
   z-index: 20; pointer-events: none;
   display: none;
   background: rgba(26,18,8,0.9); color: #fff;
@@ -169,11 +171,11 @@ html, body {
 /* 자모 조합 단계 전용 데모 글상자: 실제 제품 키보드는 자기 영역 밖에 이런 걸 못 그리지만,
    이 데모에서는 입력창 안에 큼직한 카드로 띄워서 지금 입력된 글자를 보여준다 — 문구를
    읽는 동안에도 결과를 놓치지 않게 하기 위함. 조합 단계 시작~끝까지만 노출한다.
-   top은 배너 문구 길이(1~2줄)에 따라 배너 아래쪽 높이가 달라지므로 고정값 대신 JS
-   (positionDemoBox)가 배너 바로 아래로 매번 다시 계산해서 넣는다 — 겹치지 않게.
+   bottom은 배너 문구 길이(1~2줄)에 따라 배너 위쪽 경계가 달라지므로 고정값 대신 JS
+   (positionDemoBox)가 배너 바로 위로 매번 다시 계산해서 넣는다 — 겹치지 않게.
    height도 고정해서 빈 상태/글자 있는 상태 사이에 상자 크기가 흔들리지 않게 한다. */
 #tutorial-demo-box {
-  position: absolute; left: 14%; right: 14%; top: 0;
+  position: absolute; left: 14%; right: 14%; bottom: 0;
   height: clamp(100px, 26vw, 140px);
   z-index: 20; pointer-events: none;
   display: none;
@@ -197,6 +199,25 @@ html, body {
   transition: left 0.25s ease;
 }
 #tutorial-zone-arrow.hidden { display: none; }
+/* 엄지 밑에 깔리는 배경 화살표(swipe.png, 위로 갈수록 진해지는 파란 그라데이션).
+   위치는 안 움직이고 투명도만 변한다 — 엄지가 스와이프하는 동안 같이 나타나 있다가,
+   엄지가 사라지고 난 뒤에도 잠깐 남아 있다 천천히(슬그머니) 옅어져 사라진다.
+   thumb-wrap보다 먼저 마크업에 있어서(z-index 없이도) 항상 엄지 뒤에 깔린다. */
+#tutorial-swipe-bg-arrow {
+  position: absolute; left: 50%; top: 40%;
+  transform: translate(-50%, -50%);
+  width: clamp(28px, 9vw, 40px); height: auto;
+  opacity: 0;
+  pointer-events: none;
+}
+#tutorial-swipe-bg-arrow.play { animation: tut-arrow-bg-fade 4s ease-out; }
+@keyframes tut-arrow-bg-fade {
+  0%   { opacity: 1; }
+  15%  { opacity: 1; }
+  45%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* 그림 속 엄지는 판 전체(직사각형)를 채우고 있지만 실제로 화면에 닿는 부분(손톱 반대
    쪽의 볼록한 지문 쪽)은 판의 정중앙이 아니라 한쪽으로 치우쳐 있어서, 판 자체를
    50%로 맞추면 닿는 지점이 존 중앙에서 벗어나 보인다. 오른손 그림은 그 지점이 오른쪽에
@@ -210,12 +231,16 @@ html, body {
 #tutorial-thumb-wrap.shift-right { transform: translateX(-34%); }
 #tutorial-thumb-wrap.shift-left { transform: translateX(-66%); }
 #tutorial-thumb-wrap img { display: block; width: clamp(70px, 22vw, 104px); height: auto; }
-#tutorial-thumb-wrap.play { animation: tut-thumb-sweep 0.75s ease-in-out; }
+/* 시작 지점(스와이프 존 밑쪽)에서 파다닥 깜빡이듯 잠깐 나타나 "여기서 시작"을
+   암시한 다음(0~20%), 그대로 빠르게 위로 훅 스와이프하며 사라진다(20~100%).
+   깜빡이는 동안엔 transform을 건드리면 안 된다 — .shift-left/.shift-right가
+   그 속성으로 좌우 보정을 걸어놔서, bottom/opacity만으로 파다닥임을 표현한다. */
+#tutorial-thumb-wrap.play { animation: tut-thumb-sweep 0.28s linear; }
 @keyframes tut-thumb-sweep {
-  0%   { bottom: 20%; opacity: 0; }
-  10%  { opacity: 1; }
-  85%  { bottom: 58%; opacity: 1; }
-  100% { bottom: 62%; opacity: 0; }
+  0%   { bottom: 18%; opacity: 1; }
+  40%   { bottom: 40%; opacity: 1; }
+  90%  { bottom: 60%; opacity: 1; }
+  100% { bottom: 100%; opacity: 0; }
 }
 
 /* 키 화살표: ख/ी 조합 단계에서 지금 눌러야 할 키 바로 위에서 아래를 가리키며 통통 튄다. */

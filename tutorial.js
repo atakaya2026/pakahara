@@ -40,6 +40,7 @@ function initTutorialDom() {
   els.text = q('tutorial-text');
   els.segs = Array.from(q('tutorial-progress').querySelectorAll('.seg'));
   els.zoneArrow = q('tutorial-zone-arrow');
+  els.swipeBgArrow = q('tutorial-swipe-bg-arrow');
   els.thumbWrap = q('tutorial-thumb-wrap');
   els.thumbImg = q('tutorial-thumb-img');
   els.keyArrow = q('tutorial-key-arrow');
@@ -66,9 +67,9 @@ function setProgress(n) {
   els.segs.forEach((s, i) => s.classList.toggle('done', i < n));
 }
 
-// 문구가 뜨자마자 엄지가 같이 지나가면 아직 문구도 다 못 읽었는데 리듬이 어색해서,
-// 문구를 먼저 보여주고 한 박자 쉬었다가 엄지 스와이프를 보여준다.
-const THUMB_READ_DELAY_MS = 1100;
+// 문구가 뜨자마자 엄지/화살표가 같이 나오면 아직 문구도 다 못 읽었는데 리듬이 어색해서,
+// 문구를 먼저 보여주고 한 박자 쉬었다가 엄지 스와이프나 키 화살표를 보여준다.
+const READ_DELAY_MS = 1100;
 let thumbTimer = null;
 
 function showZoneStep(zone, text) {
@@ -83,16 +84,23 @@ function showZoneStep(zone, text) {
   els.thumbWrap.classList.toggle('shift-left', isLeft);
   els.thumbWrap.classList.toggle('shift-right', !isLeft);
   els.thumbWrap.classList.remove('play');
+  els.swipeBgArrow.classList.remove('play');
   if (thumbTimer) clearTimeout(thumbTimer);
-  thumbTimer = setTimeout(playThumb, THUMB_READ_DELAY_MS);
+  thumbTimer = setTimeout(playThumb, READ_DELAY_MS);
 }
 
 // 엄지 스와이프 애니메이션을 한 번만 재생한다(반복 재생 X). 같은 단계에서 다시
-// 보여줘야 할 때(오답 피드백 등)도 이 함수로 처음부터 재생시킨다.
+// 보여줘야 할 때(오답 피드백 등)도 이 함수로 처음부터 재생시킨다. 엄지 밑에 깔리는
+// 배경 화살표도 같이 재생시킨다 — 엄지가 사라진 뒤에도 화살표는 더 오래 남아 있다가
+// 스스로 천천히 옅어진다(각자 애니메이션 길이가 달라서 따로 재생시켜야 한다).
 function playThumb() {
   els.thumbWrap.classList.remove('play');
   void els.thumbWrap.offsetWidth; // 리플로우를 강제해 애니메이션을 처음부터 다시 재생시킨다
   els.thumbWrap.classList.add('play');
+
+  els.swipeBgArrow.classList.remove('play');
+  void els.swipeBgArrow.offsetWidth;
+  els.swipeBgArrow.classList.add('play');
 }
 
 function shakeBanner() {
@@ -149,22 +157,27 @@ function beginComposeSteps() {
   onTutorialRender = checkComposeProgress;
 }
 
+// 스와이프 엄지와 같은 리듬: 문구가 먼저 보이고, 한 박자 쉬었다가 화살표가 나타난다.
+let keyArrowTimer = null;
+
 function positionKeyArrow(row, col) {
   const c = HIT_COLS[col], r = HIT_ROWS[row];
   Object.assign(els.keyArrow.style, {
     left: c.start + '%', width: c.size + '%',
     top: (r.start - 9) + '%', height: '9%',
   });
-  els.keyArrow.classList.remove('hidden');
+  els.keyArrow.classList.add('hidden');
+  if (keyArrowTimer) clearTimeout(keyArrowTimer);
+  keyArrowTimer = setTimeout(() => els.keyArrow.classList.remove('hidden'), READ_DELAY_MS);
 }
 
-// 배너 문구 길이(1~2줄)에 따라 배너 높이가 달라지므로, 데모 글상자를 배너 바로 아래
+// 배너 문구 길이(1~2줄)에 따라 배너 높이가 달라지므로, 데모 글상자를 배너 바로 위
 // 일정 간격을 두고 다시 계산해서 배치한다 — 고정 %값으로는 겹치는 경우가 있었다.
 function positionDemoBox() {
   const wrapRect = els.banner.offsetParent.getBoundingClientRect();
   const bannerRect = els.banner.getBoundingClientRect();
   const GAP = 16;
-  els.demoBox.style.top = (bannerRect.bottom - wrapRect.top + GAP) + 'px';
+  els.demoBox.style.bottom = (wrapRect.bottom - bannerRect.top + GAP) + 'px';
 }
 
 function checkComposeProgress() {
@@ -214,6 +227,7 @@ function checkComposeProgress() {
 function finishTutorial() {
   onTutorialRender = null;
   tutorialStep = 'outro';
+  if (keyArrowTimer) clearTimeout(keyArrowTimer);
   els.keyArrow.classList.add('hidden');
   els.text.textContent = TUT.outro;
   setTimeout(() => {
