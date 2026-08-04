@@ -235,11 +235,11 @@ html, body {
    암시한 다음(0~20%), 그대로 빠르게 위로 훅 스와이프하며 사라진다(20~100%).
    깜빡이는 동안엔 transform을 건드리면 안 된다 — .shift-left/.shift-right가
    그 속성으로 좌우 보정을 걸어놔서, bottom/opacity만으로 파다닥임을 표현한다. */
-#tutorial-thumb-wrap.play { animation: tut-thumb-sweep 0.33s linear; }
+#tutorial-thumb-wrap.play { animation: tut-thumb-sweep 0.34s linear; }
 @keyframes tut-thumb-sweep {
-  0%   { bottom: 18%; opacity: 1; }
-  40%   { bottom: 40%; opacity: 1; }
-  90%  { bottom: 60%; opacity: 1; }
+  0%   { bottom: 28%; opacity: 1; }
+  13%   { bottom: 30%; opacity: 1; }
+  90%  { bottom: 90%; opacity: 1; }
   100% { bottom: 100%; opacity: 0; }
 }
 
