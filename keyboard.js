@@ -1007,7 +1007,7 @@ function renderFavorites() {
     b.appendChild(sp);
     wrap.appendChild(b);
   });
-  wrap.appendChild(makeBtn('fav-close', rectStyle(FAV_CLOSE_RECT), hideFavorites));
+  wrap.appendChild(makeBtn('fav-close', rectStyle(FAV_CLOSE_RECT), exitToBaseMode));
   wrap.appendChild(makeBtn('fav-edit', rectStyle(FAV_EDIT_RECT), openFavoriteEditor));
 }
 
@@ -1022,19 +1022,19 @@ function hideFavorites() {
   document.getElementById('fav-overlay').classList.remove('show');
 }
 
-// 좌측 1/3 스와이프 = 상용구 모드 토글. 이미 열려 있으면 닫기만 한다(숫자판과 동일 패턴).
+// 좌측 1/3 스와이프 = 상용구 모드 토글. 이미 열려 있으면 "나가기"다 — 대문자/숫자판
+// 위에서 열렸을 수도 있으므로(패널은 그 밑 모드를 안 바꾸고 그냥 얹힐 뿐이다) 단순히
+// hideFavorites만 하면 그 밑에 깔려 있던 임시 모드가 그대로 남는다. 다른 임시 모드의
+// "나가기"와 똑같이 항상 진짜 기본 모드(힌디/영문)까지 복귀해야 한다.
 function toggleFavoritesMode() {
-  if (favoritesMode) hideFavorites(); else showFavorites();
+  if (favoritesMode) exitToBaseMode(); else showFavorites();
 }
 
-// 상용구는 항상 커서(=문장 끝)에 삽입한 뒤 패널을 곧바로 닫는다.
+// 상용구는 항상 커서(=문장 끝)에 삽입한 뒤 패널을 닫는다 — 이때도 위와 같은 이유로
+// 패널만 닫지 않고 기본 모드까지 복귀한다(exitToBaseMode가 hideFavorites까지 포함).
 function insertFavorite(text) {
   appendText(text);
-  state.activeRoot = null; state.activeCharIdx = 0;
-  state.lastSignKey = null; state.signTapIdx = 0;
-  state.independentMode = false;
-  hideFavorites();
-  render();
+  exitToBaseMode();
 }
 
 // 키보드 앱은 자기 영역 밖(메인 앱 화면)을 그릴 수 없으므로, 실제 제품이라면 메인 앱의
