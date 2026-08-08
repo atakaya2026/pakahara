@@ -73,7 +73,7 @@ function onBeforeOpenFavoriteEditor() {
   const snapshot = {
     text: getText(),
     state,
-    numericMode, lastNonNumericMode, beforeShortform,
+    numericMode, lastNonNumericMode,
   };
   sessionStorage.setItem(RESUME_KEY, JSON.stringify(snapshot));
 }
@@ -88,7 +88,6 @@ function restoreResumeState() {
   Object.assign(state, snap.state || {});
   numericMode = !!snap.numericMode;
   lastNonNumericMode = !!snap.lastNonNumericMode;
-  beforeShortform = snap.beforeShortform || null;
   updateKbdImage();
   render();
   return true;

@@ -65,10 +65,6 @@ let favoritesMode = false;
 let numericMode = false;
 let lastNonNumericMode = false; // 숫자판 진입 직전 상태: false=파카하라, true=영문
 
-// 좌측 1/3 스와이프로 들어가는 "약어 모드"(영문 대문자 고정) 진입 직전 상태 스냅샷.
-// 다시 좌측 스와이프하면 이 스냅샷으로 되돌아간다(숫자판 토글과 같은 패턴).
-let beforeShortform = null;
-
 // 호스트 페이지가 지정하지 않으면 #editor 엘리먼트를 기본 입력 대상으로 삼는다
 // (mobile_demo.html의 원래 방식). 상용구 편집 화면처럼 여러 입력 대상이 있는
 // 페이지는 KB_setEditorAdapter로 "현재 포커스된 대상"을 갈아 끼운다.
@@ -479,40 +475,25 @@ function toggleEnglishMode() {
   if (state.engActive) exitEnglishMode(); else enterEnglishMode();
 }
 
-// 가운데 1/3 스와이프: 이미 대문자(약어) 모드라면 굳이 연속 2회를 기다리지 않고
-// 단 1회 스와이프로 즉시 빠져나온다 — 약어 하나 치고 바로 원래 타이핑으로 돌아가는
-// 흐름이 잦으므로, "나가기"는 "들어가기"보다 가벼워야 한다. 약어 모드가 아닐 때만
-// 아래 더블스와이프 판정을 적용한다: 한 번이면 toggleEnglishMode(힌영 토글/다른 모드
-// 복귀), 짧은 시간 안에 연이어 두 번이면 대문자 모드로 진입한다(이게 "들어가기" 쪽이
-// 더블을 요구하는 이유 — 평소에 흔한 단일 스와이프 토글과 헷갈리지 않게). 매 스와이프를
-// 지연 없이 바로 실행한다 — 첫 스와이프가 즉시 언어를 토글하고, 두 번째 스와이프가
-// 왔을 때만 사후에 "이건 더블이었다"고 판단해 toggleShortformMode로 대체한다(물리
-// 시프트키처럼 첫 탭을 타이머로 유예하면 스와이프 특성상(손을 뗐다 다시 눌러야 함)
-// 매번 체감 지연이 생겨 버린다). 다만 그 첫 스와이프의 토글이 "약어 모드 진입 전
-// 상태"로 그대로 새어 들어가면 안 되므로(안 그러면 힌디 상태에서 연속 2회 스와이프로
-// 약어 모드에 들어갔다가 1회 스와이프로 나왔을 때 힌디가 아니라 첫 스와이프가 잠깐
-// 토글했던 영문으로 복귀해버림), 첫 스와이프 직전 상태를 따로 기억해뒀다가 두 번째
-// 스와이프에서 그 스냅샷을 toggleShortformMode에 넘겨 진짜 원래 상태로 복귀하게 한다.
+// 가운데 1/3 스와이프. 규칙은 단순하다: 짧은 시간 안에 연이어 두 번이면 이전에 뭘
+// 하고 있었든 상관없이 무조건 대문자(약어) 모드로 진입하고(enterShortformMode),
+// 그게 아니면(1회) toggleEnglishMode — 힌디/영문이면 토글, 숫자판/상용구면 그냥
+// 나가기 — 을 그대로 부른다. 약어 모드도 engActive===true인 상태일 뿐이라 "영문이면
+// 토글"에 자연히 걸려서, 약어 모드 중 1회 스와이프는 항상 힌디로 돌아간다(예전엔
+// 진입 직전 상태를 기억했다가 복원해서 나가는 곳이 매번 달라졌는데, 그게 오히려
+// 헷갈린다는 피드백을 받고 "무조건 힌디로"로 단순화했다).
+// 스와이프는 탭과 달리 손을 뗐다가 다시 짚어야 두 번째가 인정되는데, 그 "떼고
+// 다시 짚기"에는 700ms가 너무 빠듯해서 대부분 놓치고 매번 단일 스와이프로만
+// 처리돼버렸던 적이 있어 여유 있게 늘려뒀다.
 let lastCenterSwipeTime = 0;
-let centerSwipePrevSnapshot = null; // 이번 (단일→더블 될 수도 있는) 스와이프 시퀀스 시작 직전 상태
-// 스와이프는 탭과 달리 손을 뗐다가 다시 짚어야 두 번째가 인정되는데, 실측해보니 그
-// "떼고 다시 짚기"에 700ms는 너무 빠듯해서 실제로는 거의 항상 놓쳐 매번 단일 스와이프로만
-// 처리돼버렸다(더블스와이프로 대문자 모드에 못 들어가는 버그로 보고됨). 여유 있게 늘림.
 const CENTER_DOUBLE_SWIPE_MS = 1500;
 function handleCenterSwipe() {
-  if (isShortformActive()) {
-    lastCenterSwipeTime = 0;
-    toggleShortformMode();
-    return;
-  }
   const now = Date.now();
   if (now - lastCenterSwipeTime < CENTER_DOUBLE_SWIPE_MS) {
     lastCenterSwipeTime = 0; // 세 번째 연속 스와이프가 또 더블로 잡히지 않도록
-    toggleShortformMode(centerSwipePrevSnapshot);
-    centerSwipePrevSnapshot = null;
+    enterShortformMode();
   } else {
     lastCenterSwipeTime = now;
-    centerSwipePrevSnapshot = { numericMode, engActive: state.engActive, engShiftState: state.engShiftState };
     toggleEnglishMode();
   }
 }
@@ -569,38 +550,26 @@ function handleShiftTap() {
   }, 300);
 }
 
-// 가운데 1/3 연속 2회 스와이프(handleCenterSwipe) = "약어 모드" 토글. 힌디/영문/숫자
-// 어느 모드에 있든 상관없이 곧장 영문 대문자(시프트락) 상태로 보낸다 — 인도에서 약어를
-// 대문자로 쓰는 관행을 반영해 "영문 모드"와는 별개 개념으로 취급한다(실제로는
-// engActive+lock 상태일 뿐). 이미 약어 모드라면 진입 직전 상태로 되돌아간다(숫자판
-// 닫기와 같은 패턴 — 다시 연속 2회 스와이프하면 꺼진다).
-// 약어 모드 안에서 대문자를 풀고 싶으면 물리 시프트키를 그대로 쓰면 된다(기존 handleShiftTap).
+// 가운데 1/3 연속 2회 스와이프(handleCenterSwipe) 전용 — "약어 모드" 진입. 힌디/영문/
+// 숫자/상용구 어느 상태에 있었든 상관없이 곧장 영문 대문자(시프트락) 상태로 보낸다 —
+// 인도에서 약어를 대문자로 쓰는 관행을 반영해 "영문 모드"와는 별개 개념으로 취급하지만
+// 실제로는 engActive+lock 상태일 뿐이다. 나가는 분기는 따로 없다 — 약어 모드도
+// engActive===true라 handleCenterSwipe의 1회 스와이프 규칙(toggleEnglishMode: "영문이면
+// 토글")에 자연히 걸려서, 1회 스와이프만으로 항상 힌디로 돌아간다. 물리 시프트키로도
+// 대문자를 풀 수 있다(기존 handleShiftTap, engShiftState만 바꿀 뿐 모드 자체는 안 나간다).
 function isShortformActive() {
   return !numericMode && state.engActive && state.engShiftState === 'lock';
 }
 
-// snapshotOverride: 진입 시점에 이 값이 주어지면(handleCenterSwipe가 더블스와이프의
-// 첫 스와이프 직전 상태를 넘겨줄 때) 호출 당시 상태 대신 이걸 "원래 상태"로 기억한다.
-function toggleShortformMode(snapshotOverride) {
+function enterShortformMode() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
-  if (isShortformActive()) {
-    if (beforeShortform) {
-      numericMode = beforeShortform.numericMode;
-      state.engActive = beforeShortform.engActive;
-      state.engShiftState = beforeShortform.engShiftState;
-      beforeShortform = null;
-    } else {
-      numericMode = false; state.engActive = false; state.engShiftState = 'off';
-    }
-  } else {
-    beforeShortform = snapshotOverride || { numericMode, engActive: state.engActive, engShiftState: state.engShiftState };
-    numericMode = false;
-    state.engActive = true;
-    state.engShiftState = 'lock';
-    state.activeRoot = null; state.activeCharIdx = 0;
-    state.lastSignKey = null; state.signTapIdx = 0;
-    state.independentMode = false;
-  }
+  if (favoritesMode) hideFavorites(); // 상용구 패널이 떠 있었다면 닫고 진입(숫자판 진입과 같은 패턴)
+  numericMode = false;
+  state.engActive = true;
+  state.engShiftState = 'lock';
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
   updateKbdImage();
   render();
 }
@@ -1021,7 +990,6 @@ function resetAll() {
     engActive:false, engShiftState:'off',
   };
   numericMode = false; lastNonNumericMode = false;
-  beforeShortform = null;
   lastCenterSwipeTime = 0;
   hideFavorites();
   updateKbdImage();
