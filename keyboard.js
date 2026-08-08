@@ -371,6 +371,25 @@ let kbdGestureActive = false;
 let activeKeyPointerId = null;
 let activeKeyPointerSetAt = 0;
 const ACTIVE_KEY_STALE_MS = 1500;
+
+// render()는 매 입력마다 #kbd를 통째로 비우고 새로 그리는데, 그 순간 다른 손가락이
+// 아직 어떤 키를 누르고 있는 채라면 그 버튼 DOM이 통째로 사라져버린다. pointerup이
+// 캡처했던 그 버튼으로 다시는 안 오게 되면서(브라우저가 암묵적으로 캡처를 풀고 현재
+// 화면 위치로 다시 히트테스트하는데, 그 자리엔 이미 "새" 버튼이 있어 downPointerId가
+// 안 맞아 아무 데서도 안 받아짐) 그 손가락의 입력이 통째로 유실된다 — 실기기 두 손가락
+// 동시 타이핑에서 보고된 "누락"의 유력한 원인. 그래서 화면에 아직 눌려있는 손가락이
+// (지금 이 스와이프를 만들고 있는 손가락은 빼고) 하나라도 있으면 실제 재렌더를
+// 미뤄뒀다가, 마지막 손가락이 뗄 때 한 번에 처리한다.
+const downKeyPointerIds = new Set();
+let swipeInProgressPointerId = null; // armGesture가 세팅 — 이 손가락은 렌더를 막는 쪽에서 제외
+let renderPending = false;
+function isRenderBlocked() {
+  for (const id of downKeyPointerIds) if (id !== swipeInProgressPointerId) return true;
+  return false;
+}
+function flushPendingRenderIfIdle() {
+  if (renderPending && !isRenderBlocked()) render();
+}
 let queuedKeyCommits = []; // 활성 키가 아직 안 끝나서 미뤄둔 onClick들, 순서대로 실행
 function runQueuedKeyCommits() {
   while (queuedKeyCommits.length) queuedKeyCommits.shift()();
@@ -418,6 +437,7 @@ function makeBtn(cls, style, onClick, longPressText) {
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       downPointerId = e.pointerId;
+      downKeyPointerIds.add(e.pointerId);
       // 아직 활성 키가 없거나(첫 손가락) 활성 키가 너무 오래 안 풀렸으면(유실 추정)
       // 이 키를 활성 키로 등록한다. 이미 다른 손가락이 활성 키를 쥐고 있으면 그건
       // 안 건드리고 그대로 둔다 — 이 키는 나중에 pointerup에서 "먼저 눌린 키"가
@@ -445,27 +465,33 @@ function makeBtn(cls, style, onClick, longPressText) {
     b.addEventListener('pointerup', (e) => {
       if (e.pointerId !== downPointerId) return;
       downPointerId = null;
+      downKeyPointerIds.delete(e.pointerId);
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       pendingLongPressCancel = null;
       if (kbdGestureActive) {
         // 이 키는 스와이프로 소비됐으니 입력 없음(기존 동작). 이 키가 활성 키였다면
         // 자리를 비우고 기다리던 큐를 마저 흘려보낸다.
         if (activeKeyPointerId === e.pointerId) { activeKeyPointerId = null; runQueuedKeyCommits(); }
+        flushPendingRenderIfIdle();
         return;
       }
       if (activeKeyPointerId !== null && activeKeyPointerId !== e.pointerId
           && Date.now() - activeKeyPointerSetAt < ACTIVE_KEY_STALE_MS) {
         // 더 먼저 눌린 키가 아직 안 끝났다 — 버리지 않고 순서를 기다리게 큐에 쌓는다.
         queuedKeyCommits.push(onClick);
+        flushPendingRenderIfIdle();
         return;
       }
       activeKeyPointerId = null;
       onClick();
       runQueuedKeyCommits();
+      flushPendingRenderIfIdle();
     });
     b.addEventListener('pointercancel', (e) => {
       if (e.pointerId === downPointerId) downPointerId = null;
+      downKeyPointerIds.delete(e.pointerId);
       if (activeKeyPointerId === e.pointerId) { activeKeyPointerId = null; runQueuedKeyCommits(); }
+      flushPendingRenderIfIdle();
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       pendingLongPressCancel = null;
     });
@@ -787,6 +813,7 @@ function handleSwipeDelete() {
   function armGesture(e) {
     triggered = true;
     kbdGestureActive = true;
+    swipeInProgressPointerId = e.pointerId; // render() 게이트에서 이 손가락만 예외로 친다
     if (pendingLongPressCancel) { pendingLongPressCancel(); pendingLongPressCancel = null; }
     try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
   }
@@ -824,12 +851,15 @@ function handleSwipeDelete() {
     if (e.pointerId !== activePointerId) return;
     try { wrap.releasePointerCapture(e.pointerId); } catch (err) {}
     activePointerId = null; startX = null; startY = null; triggered = false; zone = null; kbdGestureActive = false;
+    if (swipeInProgressPointerId === e.pointerId) swipeInProgressPointerId = null;
   }
   wrap.addEventListener('pointerup', endGesture);
   wrap.addEventListener('pointercancel', endGesture);
 })();
 
 function render() {
+  if (isRenderBlocked()) { renderPending = true; return; }
+  renderPending = false;
   if (numericMode) { renderNumeric(); }
   else if (state.engActive) { renderEng(); }
   else { renderDevanagari(); }
@@ -1081,6 +1111,7 @@ function resetAll() {
   lastCenterSwipeTime = 0;
   centerSwipeBaseSnapshot = null;
   activeKeyPointerId = null; activeKeyPointerSetAt = 0; queuedKeyCommits = [];
+  downKeyPointerIds.clear(); swipeInProgressPointerId = null; renderPending = false;
   hideFavorites();
   updateKbdImage();
   render();
