@@ -380,11 +380,21 @@ const ACTIVE_KEY_STALE_MS = 1500;
 // 동시 타이핑에서 보고된 "누락"의 유력한 원인. 그래서 화면에 아직 눌려있는 손가락이
 // (지금 이 스와이프를 만들고 있는 손가락은 빼고) 하나라도 있으면 실제 재렌더를
 // 미뤄뒀다가, 마지막 손가락이 뗄 때 한 번에 처리한다.
-const downKeyPointerIds = new Set();
+// 값은 눌린 시각(ms) — pointerup/cancel이 유실돼서(바로 이 파일이 막으려는 그 문제)
+// 어떤 손가락이 이 목록에서 영영 안 빠지면, render()가 그때부터 영원히 막혀서 이후
+// updateKbdImage()로 배경 이미지는 계속 바뀌는데 #kbd 오버레이는 그 시점 이후로 다시는
+// 안 그려지는 상태가 됐었다(모드가 바뀔 때마다 새 배경 위에 옛 오버레이가 계속 겹쳐
+// 보임 — 실기기에서 실제로 겪은 버그). activeKeyPointerId와 같은 원칙으로, 너무 오래
+// 안 풀린 손가락은 렌더를 막는 목록에서도 무시한다.
+const downKeyPointers = new Map(); // pointerId -> 누른 시각
 let swipeInProgressPointerId = null; // armGesture가 세팅 — 이 손가락은 렌더를 막는 쪽에서 제외
 let renderPending = false;
 function isRenderBlocked() {
-  for (const id of downKeyPointerIds) if (id !== swipeInProgressPointerId) return true;
+  const now = Date.now();
+  for (const [id, downAt] of downKeyPointers) {
+    if (id === swipeInProgressPointerId) continue;
+    if (now - downAt < ACTIVE_KEY_STALE_MS) return true;
+  }
   return false;
 }
 function flushPendingRenderIfIdle() {
@@ -437,7 +447,7 @@ function makeBtn(cls, style, onClick, longPressText) {
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       downPointerId = e.pointerId;
-      downKeyPointerIds.add(e.pointerId);
+      downKeyPointers.set(e.pointerId, Date.now());
       // 아직 활성 키가 없거나(첫 손가락) 활성 키가 너무 오래 안 풀렸으면(유실 추정)
       // 이 키를 활성 키로 등록한다. 이미 다른 손가락이 활성 키를 쥐고 있으면 그건
       // 안 건드리고 그대로 둔다 — 이 키는 나중에 pointerup에서 "먼저 눌린 키"가
@@ -465,7 +475,7 @@ function makeBtn(cls, style, onClick, longPressText) {
     b.addEventListener('pointerup', (e) => {
       if (e.pointerId !== downPointerId) return;
       downPointerId = null;
-      downKeyPointerIds.delete(e.pointerId);
+      downKeyPointers.delete(e.pointerId);
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       pendingLongPressCancel = null;
       if (kbdGestureActive) {
@@ -489,7 +499,7 @@ function makeBtn(cls, style, onClick, longPressText) {
     });
     b.addEventListener('pointercancel', (e) => {
       if (e.pointerId === downPointerId) downPointerId = null;
-      downKeyPointerIds.delete(e.pointerId);
+      downKeyPointers.delete(e.pointerId);
       if (activeKeyPointerId === e.pointerId) { activeKeyPointerId = null; runQueuedKeyCommits(); }
       flushPendingRenderIfIdle();
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -1111,7 +1121,7 @@ function resetAll() {
   lastCenterSwipeTime = 0;
   centerSwipeBaseSnapshot = null;
   activeKeyPointerId = null; activeKeyPointerSetAt = 0; queuedKeyCommits = [];
-  downKeyPointerIds.clear(); swipeInProgressPointerId = null; renderPending = false;
+  downKeyPointers.clear(); swipeInProgressPointerId = null; renderPending = false;
   hideFavorites();
   updateKbdImage();
   render();
