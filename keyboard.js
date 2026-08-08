@@ -358,6 +358,24 @@ const NUM_HIT_BOT = expandAxisHitboxes(
 // 스와이프로 자리를 옮겨 다른 키 위에서 손을 떼도 그 키가 잘못 눌리지 않도록.
 let kbdGestureActive = false;
 
+// 자음+모음 조합 입력은 순서(어느 키가 먼저 "확정"됐는지)에 상태가 의존하는데,
+// 각 키 버튼이 자기 pointerId만 따로 추적하다 보니 두 손가락으로 서로 다른 키를
+// 겹쳐 누르면(예: 자음을 누른 채로 모음을 눌렀다 먼저 뗌) 확정 순서가 실제로 누른
+// 순서와 뒤바뀌어서, lastSignKey 등 상태가 아직 안 바뀐 채로 다음 키가 먼저
+// 커밋돼버렸다(모음이 멀티탭으로 오인되거나 자음 뒤에 안 붙는 등).
+// 먼저 눌린 키를 "활성 키"로 정하고, 그 키가 아직 안 끝났는데 다른 키가 먼저 손을
+// 떼면 그 입력을 버리지 않고 큐에 쌓아뒀다가, 활성 키가 커밋되는 즉시 순서대로
+// 이어서 커밋한다 — 유저가 누른 건 결국 전부 입력되되, 순서만 항상 실제로 처음
+// 누른 순서를 따르게 된다. pointerup/cancel을 놓쳐서 활성 키가 고착되는 경우를
+// 대비해 일정 시간 지나면 다음 키가 그냥 활성 키 자리를 넘겨받는 안전장치를 둔다.
+let activeKeyPointerId = null;
+let activeKeyPointerSetAt = 0;
+const ACTIVE_KEY_STALE_MS = 1500;
+let queuedKeyCommits = []; // 활성 키가 아직 안 끝나서 미뤄둔 onClick들, 순서대로 실행
+function runQueuedKeyCommits() {
+  while (queuedKeyCommits.length) queuedKeyCommits.shift()();
+}
+
 // 첫 실행 튜토리얼이 스와이프 존 동작을 가로챌 때 쓰는 훅. tutorial.js가 설정한다.
 // (zone, defaultFn) => 튜토리얼이 그 존을 기대하고 있으면 defaultFn()을 실행해 실제
 // 모드를 바꾸고, 아닌 존이면 defaultFn()을 호출하지 않아 모드 전환 자체를 막는다.
@@ -400,6 +418,14 @@ function makeBtn(cls, style, onClick, longPressText) {
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       downPointerId = e.pointerId;
+      // 아직 활성 키가 없거나(첫 손가락) 활성 키가 너무 오래 안 풀렸으면(유실 추정)
+      // 이 키를 활성 키로 등록한다. 이미 다른 손가락이 활성 키를 쥐고 있으면 그건
+      // 안 건드리고 그대로 둔다 — 이 키는 나중에 pointerup에서 "먼저 눌린 키"가
+      // 끝날 때까지 큐에서 순서를 기다리게 된다(입력 자체는 버리지 않는다).
+      if (activeKeyPointerId === null || Date.now() - activeKeyPointerSetAt >= ACTIVE_KEY_STALE_MS) {
+        activeKeyPointerId = e.pointerId;
+        activeKeyPointerSetAt = Date.now();
+      }
       // 손가락이 살짝 흔들려 이웃 키 쪽으로 pointerup이 잡혀도 이 키가 눌린 걸로
       // 인식하도록 포인터를 붙잡아둔다(캡처해도 wrap까지의 버블링은 그대로 유지됨).
       try { b.setPointerCapture(e.pointerId); } catch (err) {}
@@ -421,10 +447,25 @@ function makeBtn(cls, style, onClick, longPressText) {
       downPointerId = null;
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       pendingLongPressCancel = null;
-      if (!kbdGestureActive) onClick();
+      if (kbdGestureActive) {
+        // 이 키는 스와이프로 소비됐으니 입력 없음(기존 동작). 이 키가 활성 키였다면
+        // 자리를 비우고 기다리던 큐를 마저 흘려보낸다.
+        if (activeKeyPointerId === e.pointerId) { activeKeyPointerId = null; runQueuedKeyCommits(); }
+        return;
+      }
+      if (activeKeyPointerId !== null && activeKeyPointerId !== e.pointerId
+          && Date.now() - activeKeyPointerSetAt < ACTIVE_KEY_STALE_MS) {
+        // 더 먼저 눌린 키가 아직 안 끝났다 — 버리지 않고 순서를 기다리게 큐에 쌓는다.
+        queuedKeyCommits.push(onClick);
+        return;
+      }
+      activeKeyPointerId = null;
+      onClick();
+      runQueuedKeyCommits();
     });
     b.addEventListener('pointercancel', (e) => {
       if (e.pointerId === downPointerId) downPointerId = null;
+      if (activeKeyPointerId === e.pointerId) { activeKeyPointerId = null; runQueuedKeyCommits(); }
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       pendingLongPressCancel = null;
     });
@@ -1039,6 +1080,7 @@ function resetAll() {
   numericMode = false; baseModeIsEnglish = false;
   lastCenterSwipeTime = 0;
   centerSwipeBaseSnapshot = null;
+  activeKeyPointerId = null; activeKeyPointerSetAt = 0; queuedKeyCommits = [];
   hideFavorites();
   updateKbdImage();
   render();
