@@ -23,13 +23,15 @@
 </div>
 <div id="editor-wrap">
   <div id="editor"></div>
-  <div id="tutorial-banner">
-    <div id="tutorial-progress">
-      <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
-    </div>
-    <div id="tutorial-text"></div>
+</div>
+<div id="tutorial-topbar">
+  <img id="tutorial-topbar-image" src="images/tutorial.png" alt="" draggable="false" />
+  <div id="tutorial-progress">
+    <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
   </div>
-  <div id="tutorial-demo-box"></div>
+  <div id="tutorial-demo-box"><span id="tutorial-demo-text"></span><span class="cursor">|</span></div>
+  <button id="tutorial-back-btn" aria-label="Back"></button>
+  <div id="tutorial-banner"><div id="tutorial-text"></div></div>
 </div>
 <div id="keyboard-wrap">
   <img id="kbd-image" src="images/keyboard.png" alt="keyboard" draggable="false" />
@@ -71,7 +73,7 @@ function onBeforeOpenFavoriteEditor() {
   const snapshot = {
     text: getText(),
     state,
-    numericMode, lastNonNumericMode, numLastKey, numTapIdx, beforeShortform,
+    numericMode, lastNonNumericMode, beforeShortform,
   };
   sessionStorage.setItem(RESUME_KEY, JSON.stringify(snapshot));
 }
@@ -86,8 +88,6 @@ function restoreResumeState() {
   Object.assign(state, snap.state || {});
   numericMode = !!snap.numericMode;
   lastNonNumericMode = !!snap.lastNonNumericMode;
-  numLastKey = snap.numLastKey || null;
-  numTapIdx = snap.numTapIdx || 0;
   beforeShortform = snap.beforeShortform || null;
   updateKbdImage();
   render();

@@ -26,6 +26,8 @@ html, body {
 #action-bar .title { color: #4caf80; font-size: 15px; font-weight: bold; letter-spacing: 1px; }
 .action-btn { padding: 5px 12px; border-radius: 6px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; }
 .action-btn.reset { background: #6b7280; color: #fff; }
+/* 튜토리얼이 진행되는 동안은 이 기본 액션바 대신 #tutorial-topbar가 그 자리를 차지한다 */
+#action-bar.tutorial-hidden { display: none; }
 
 .cursor { color: #4caf80; animation: blink 1s step-end infinite; font-weight: 100; }
 @keyframes blink { from, to { opacity: 0; } 50% { opacity: 1; } }
@@ -115,6 +117,15 @@ html, body {
 .kbd-space-label .sp-part.dark { color: #1a1208; }
 .kbd-space-label .sp-part.gray { color: #9a9488; }
 
+/* 엔터키 라벨: 이미지엔 라벨을 안 그려 넣는다 — 실제 제품에서는 return/go/search/
+   send/done처럼 OS·입력 상황에 따라 바뀌는 값이라 항상 JS(런타임)가 그려야 하기
+   때문이다. 이 데모는 그 상황별 라벨 하나를 대표로 보여준다. */
+.kbd-enter-label {
+  position: absolute; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  color: #2b2620; font-weight: 700; font-size: clamp(13px, 4.2vw, 18px);
+}
+
 /* 인트로: 첫 진입 시 뜨는 시작 카드. 첫 안내 문구 + 시작 버튼만 있는 단순한 모달. */
 #tutorial-intro-overlay {
   position: absolute; inset: 0; z-index: 50;
@@ -139,23 +150,10 @@ html, body {
 }
 
 /* 진행형 튜토리얼: 화살표(스와이프 존/키 안내)는 키보드 영역 위에 얹히는 레이어에
-   남아 있지만, 배너(진행바+문구)는 실제 제품이라면 불가능해도 이 데모에서는 입력창
-   안으로 옮겨뒀다 — 안내를 읽으면서 동시에 입력 결과도 눈에 들어오게 하기 위함.
-   배너는 키보드 바로 위에 고정해서 "문구를 읽고 바로 아래 키보드로 손을 움직이는"
-   동선이 짧아지게 했고, 데모 글상자는 그 배너 위(더 잘 보이는 자리)에 띄운다.
-   키 입력/스크롤은 그대로 통과해야 하므로 둘 다 pointer-events:none으로 둔다. */
+   그대로 남아 있다. 진행바/문구/입력 미리보기는 tutorial.png 상단바(#tutorial-topbar)로
+   옮겨졌다. 키 입력/스크롤은 그대로 통과해야 하므로 pointer-events:none으로 둔다. */
 #tutorial-layer { position: absolute; inset: 0; z-index: 35; pointer-events: none; }
 
-#tutorial-banner {
-  position: absolute; left: 5%; right: 5%; bottom: 4%;
-  z-index: 20; pointer-events: none;
-  display: none;
-  background: rgba(26,18,8,0.9); color: #fff;
-  border-radius: 12px; padding: 3.2% 5%;
-  text-align: center;
-}
-#tutorial-banner.show { display: block; }
-#tutorial-banner.shake { animation: tut-shake 0.4s; }
 @keyframes tut-shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-6px); }
@@ -163,33 +161,57 @@ html, body {
   60% { transform: translateX(-4px); }
   80% { transform: translateX(4px); }
 }
-#tutorial-progress { display: flex; gap: 4px; margin-bottom: 6px; }
-#tutorial-progress .seg { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.28); transition: background 0.25s; }
-#tutorial-progress .seg.done { background: #22c55e; }
-#tutorial-text { font-weight: 700; font-size: clamp(13px, 4vw, 17px); line-height: 1.4; }
 
-/* 자모 조합 단계 전용 데모 글상자: 실제 제품 키보드는 자기 영역 밖에 이런 걸 못 그리지만,
-   이 데모에서는 입력창 안에 큼직한 카드로 띄워서 지금 입력된 글자를 보여준다 — 문구를
-   읽는 동안에도 결과를 놓치지 않게 하기 위함. 조합 단계 시작~끝까지만 노출한다.
-   bottom은 배너 문구 길이(1~2줄)에 따라 배너 위쪽 경계가 달라지므로 고정값 대신 JS
-   (positionDemoBox)가 배너 바로 위로 매번 다시 계산해서 넣는다 — 겹치지 않게.
-   height도 고정해서 빈 상태/글자 있는 상태 사이에 상자 크기가 흔들리지 않게 한다. */
-#tutorial-demo-box {
-  position: absolute; left: 14%; right: 14%; bottom: 0;
-  height: clamp(100px, 26vw, 140px);
-  z-index: 20; pointer-events: none;
+/* 튜토리얼 진행 중에만 뜨는 상단바: tutorial.png(위쪽 밝은 안내 영역 + 아래쪽 어두운
+   문구 영역)를 배경 이미지로 쓰고, 그 위에 진행 점/입력 미리보기 상자/뒤로가기 버튼을
+   이미지 속 그 자리에 맞춰 겹쳐 그린다(퍼센트 좌표는 키보드 오버레이와 같은 방식).
+   튜토리얼이 끝나면 다시 기존 action-bar로 돌아간다. */
+#tutorial-topbar {
+  position: relative; width: 100%; flex-shrink: 0;
   display: none;
-  align-items: center; justify-content: center;
-  background: #faf7f2;
-  border: 3px solid #2b2620; border-radius: 18px;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
-  padding: 0 4%;
+}
+#tutorial-topbar.show { display: block; }
+#tutorial-topbar-image { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+
+/* 진행 점 5개: 이미지에 이미 그려진 회색 점 위에 정확히 겹쳐서, 완료된 단계만 초록으로 덮는다 */
+#tutorial-progress { position: absolute; top: 33.86%; height: 9.06%; left: 0; right: 0; }
+#tutorial-progress .seg {
+  position: absolute; top: 0; height: 100%; width: 3.53%;
+  border-radius: 50%; background: transparent; transition: background 0.25s;
+}
+#tutorial-progress .seg.done { background: #22c55e; }
+#tutorial-progress .seg:nth-child(1) { left: 7.69%; }
+#tutorial-progress .seg:nth-child(2) { left: 12.66%; }
+#tutorial-progress .seg:nth-child(3) { left: 17.63%; }
+#tutorial-progress .seg:nth-child(4) { left: 22.60%; }
+#tutorial-progress .seg:nth-child(5) { left: 27.56%; }
+
+/* 입력 미리보기 상자: 흰 사각형은 이미지에 이미 그려져 있어 배경 없이 텍스트+커서만 얹는다.
+   조합 단계에서 지금까지 입력된 글자를 보여주고, 그 외 단계에서는 커서만 항상 깜빡인다. */
+#tutorial-demo-box {
+  position: absolute; left: 42.22%; top: 8.69%; width: 19.87%; height: 41.34%;
+  display: flex; align-items: center; justify-content: center; gap: 2%;
   font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 700; color: #1a1208;
-  font-size: clamp(38px, 13vw, 60px);
+  font-size: clamp(28px, 11vw, 46px);
   line-height: 1;
+  overflow: hidden;
+}
+#tutorial-demo-box .cursor { font-size: clamp(28px, 11vw, 46px); }
+
+/* 뒤로가기 버튼: 이미지 속 화살표+"Back" 글자 위에 투명 버튼만 얹어 클릭 영역으로 쓴다 */
+#tutorial-back-btn {
+  position: absolute; left: 69.07%; top: 18.11%; width: 21.63%; height: 17.32%;
+  background: transparent; border: none; padding: 0; margin: 0; cursor: pointer;
+}
+
+/* 안내 문구: 이미지 아래쪽 어두운 영역 위에 얹는다(오답 시 이 영역이 흔들린다) */
+#tutorial-banner {
+  position: absolute; left: 6%; right: 6%; top: 60.5%; bottom: 4%;
+  display: flex; align-items: center; justify-content: center;
   text-align: center;
 }
-#tutorial-demo-box.show { display: flex; }
+#tutorial-banner.shake { animation: tut-shake 0.4s; }
+#tutorial-text { color: #f5f0e8; font-weight: 700; font-size: clamp(18px, 5.6vw, 24px); line-height: 1.4; }
 
 /* 스와이프 존 안내: 좌/중/우 1/3 구역 중 지금 안내 중인 구역 위로 옮겨져서, 스페이스바
    보다 살짝 위에서 시작한 엄지가 위로 살짝 스치듯 지나가는 걸 한 번만 보여준다(반복 X).
@@ -217,6 +239,14 @@ html, body {
   45%  { opacity: 1; }
   100% { opacity: 0; }
 }
+/* 삭제 스와이프(우측 좌향 가로) 전용: leftswipe.png(왼쪽으로 갈수록 진해지는 가로
+   그라데이션)를 세로 화살표 대신 존 중앙 높이에 눕혀 놓는다. 페이드 애니메이션(.play)은
+   투명도만 바꾸니 방향과 무관하게 그대로 재사용한다. */
+#tutorial-swipe-bg-arrow.horiz {
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(80px, 26vw, 120px); height: auto;
+}
 
 /* 그림 속 엄지는 판 전체(직사각형)를 채우고 있지만 실제로 화면에 닿는 부분(손톱 반대
    쪽의 볼록한 지문 쪽)은 판의 정중앙이 아니라 한쪽으로 치우쳐 있어서, 판 자체를
@@ -241,6 +271,21 @@ html, body {
   13%   { bottom: 30%; opacity: 1; }
   90%  { bottom: 90%; opacity: 1; }
   100% { bottom: 100%; opacity: 0; }
+}
+
+/* 삭제 스와이프(우측 좌향 가로) 데모: 세로 스와이프용 위치 보정을 걷어내고 존 중간
+   높이에서 오른쪽→왼쪽으로 훑는다. 1차 구현이라 배경 화살표(swipe.png, 위쪽 전용
+   그라데이션)는 안 쓰고 엄지만 움직인다. */
+#tutorial-thumb-wrap.shift-h {
+  left: 80%; bottom: 45%;
+  transform: translateX(-50%);
+}
+#tutorial-thumb-wrap.shift-h.play { animation: tut-thumb-sweep-h 0.34s linear; }
+@keyframes tut-thumb-sweep-h {
+  0%   { left: 80%; opacity: 1; }
+  13%  { left: 76%; opacity: 1; }
+  90%  { left: 10%; opacity: 1; }
+  100% { left: 2%;  opacity: 0; }
 }
 
 /* 키 화살표: ख/ी 조합 단계에서 지금 눌러야 할 키 바로 위에서 아래를 가리키며 통통 튄다. */
