@@ -63,7 +63,15 @@ let favoritesMode = false;
 
 // ── 숫자/기호 자판 상태 ──
 let numericMode = false;
-let lastNonNumericMode = false; // 숫자판 진입 직전 상태: false=파카하라, true=영문
+
+// 힌디 또는 영문 소문자만 "기본 모드"로 친다 — 대문자(약어)/숫자·기호/상용구는 전부
+// "기타(임시) 모드"다. 임시 모드 안에서 중앙 스와이프 1회("나가기")나 각 모드 자체의
+// 닫기 제스처는 항상 임시 모드에 처음 들어가기 직전의 기본 모드로 돌아가야 하고,
+// 임시 모드끼리 서로 넘나들어도(예: 대문자 상태에서 숫자판으로) 이 기억은 안 바뀌어야
+// 한다 — 안 그러면 "대문자 모드가 복귀 대상으로 잘못 먹혀서" 대문자에서 숫자판 갔다가
+// 나가면 힌디/영문이 아니라 다시 대문자로 돌아와버리는 문제가 생긴다. 그래서 기본
+// 모드에서 실제로 벗어나는 그 순간에만(아직 임시 모드가 아닐 때만) 갱신한다.
+let baseModeIsEnglish = false; // false=힌디, true=영문 소문자
 
 // 호스트 페이지가 지정하지 않으면 #editor 엘리먼트를 기본 입력 대상으로 삼는다
 // (mobile_demo.html의 원래 방식). 상용구 편집 화면처럼 여러 입력 대상이 있는
@@ -252,21 +260,20 @@ function updateKbdImage() {
     : (state.engActive ? 'images/keyboard_eng.png' : 'images/keyboard.png');
 }
 
-// 우측 1/3 스와이프로 진입: 진입 직전이 영문이었는지 파카하라였는지 기억해뒀다가
-// 닫기 키(handleNumDismiss)를 누르면 그 자리로 되돌아간다.
+// 우측 1/3 스와이프로 진입. 이미 다른 임시 모드(대문자/상용구) 안이었다면 기본 모드
+// 기억(baseModeIsEnglish)을 건드리지 않는다 — 대문자에서 숫자판으로 넘어온 경우처럼.
 function enterNumericMode() {
   if (numericMode) return;
-  lastNonNumericMode = state.engActive;
+  if (!isTemporaryMode()) baseModeIsEnglish = state.engActive;
   numericMode = true;
   updateKbdImage();
   render();
 }
 
+// 닫기 키(우측 스와이프 재사용): 진입 직전 상태가 아니라 기본 모드로 곧장 복귀한다 —
+// exitToBaseMode()와 동일한 목적지라 그대로 위임한다.
 function handleNumDismiss() {
-  numericMode = false;
-  state.engActive = lastNonNumericMode;
-  updateKbdImage();
-  render();
+  exitToBaseMode();
 }
 
 // ── 좌표 (이미지 1421×778 픽셀 실측 기준 %) ──────────────────────────────
@@ -464,14 +471,35 @@ function exitEnglishMode() {
   render();
 }
 
-// 숫자판이 떠 있는 동안의 중앙 스와이프는 "언어를 바꾸겠다"는 의도로 보기 어렵다 —
-// 숫자판 진입 전이 힌디였든 영문이었든, 유저는 그냥 숫자판에서 빠져나가고 싶은
-// 것뿐이지 굳이 반대 언어로 넘어가고 싶은 게 아니다(그러길 원했다면 애초에 우측
-// 스와이프로 들어왔을 것). 그래서 숫자판 위에서는 우측 스와이프와 완전히 동일하게
-// "진입 전 모드로 복귀"만 하고, 언어 자체를 뒤집지는 않는다.
+// 지금 "기타(임시) 모드"(대문자/숫자·기호/상용구) 안에 있는지. 임시 모드에 처음
+// 들어갈 때 기본 모드 기억(baseModeIsEnglish)을 갱신해도 되는지 판단하는 데 쓴다.
+function isTemporaryMode() {
+  return numericMode || favoritesMode || isShortformActive();
+}
+
+// 임시 모드(대문자/숫자·기호/상용구, 뭐가 됐든)에서 "나가기": 진입 직전 상태가 아니라
+// 항상 그 임시 모드 체인이 시작되기 전의 기본 모드(힌디 또는 영문 소문자)로 곧장
+// 돌아간다. 임시 모드끼리 넘나든 경우(대문자 → 숫자판 등)에도 baseModeIsEnglish는
+// 안 바뀌어 있으므로 항상 맨 처음 기본 모드로 정확히 복귀한다.
+function exitToBaseMode() {
+  numericMode = false;
+  if (favoritesMode) hideFavorites();
+  state.engActive = baseModeIsEnglish;
+  state.engShiftState = 'off';
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.lastSignKey = null; state.signTapIdx = 0;
+  state.independentMode = false;
+  updateKbdImage();
+  render();
+}
+
+// 가운데 1/3 스와이프(1회): 힌디/영문 소문자 사이의 토글이다. 지금 임시 모드(대문자/
+// 숫자·기호/상용구) 안에 있다면 토글이 아니라 그 임시 모드에서 "나가기"로 취급한다 —
+// 대문자 모드도 engActive===true인 상태지만 여기서는 절대 "그냥 영문"으로 오인해
+// 토글시키지 않는다(그러면 항상 힌디로만 나가져서, 영문 소문자에서 대문자로 들어왔을
+// 때는 잘못된 기본 모드로 돌아가 버린다).
 function toggleEnglishMode() {
-  if (favoritesMode) { hideFavorites(); return; }
-  if (numericMode) { handleNumDismiss(); return; }
+  if (isTemporaryMode()) { exitToBaseMode(); return; }
   if (state.engActive) exitEnglishMode(); else enterEnglishMode();
 }
 
@@ -554,15 +582,18 @@ function handleShiftTap() {
 // 숫자/상용구 어느 상태에 있었든 상관없이 곧장 영문 대문자(시프트락) 상태로 보낸다 —
 // 인도에서 약어를 대문자로 쓰는 관행을 반영해 "영문 모드"와는 별개 개념으로 취급하지만
 // 실제로는 engActive+lock 상태일 뿐이다. 나가는 분기는 따로 없다 — 약어 모드도
-// engActive===true라 handleCenterSwipe의 1회 스와이프 규칙(toggleEnglishMode: "영문이면
-// 토글")에 자연히 걸려서, 1회 스와이프만으로 항상 힌디로 돌아간다. 물리 시프트키로도
-// 대문자를 풀 수 있다(기존 handleShiftTap, engShiftState만 바꿀 뿐 모드 자체는 안 나간다).
+// engActive===true지만 isTemporaryMode()가 걸러내므로 toggleEnglishMode의 1회 스와이프
+// 규칙에서는 "그냥 영문"이 아니라 "임시 모드"로 취급돼 exitToBaseMode()로 나간다(대문자
+// 모드 자신도 진입 전 기본 모드를 정확히 기억하고 있다가 그리로 돌아간다). 물리
+// 시프트키로도 대문자를 풀 수 있다(기존 handleShiftTap, engShiftState만 바꿀 뿐 모드
+// 자체는 안 나간다).
 function isShortformActive() {
   return !numericMode && state.engActive && state.engShiftState === 'lock';
 }
 
 function enterShortformMode() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
+  if (!isTemporaryMode()) baseModeIsEnglish = state.engActive;
   if (favoritesMode) hideFavorites(); // 상용구 패널이 떠 있었다면 닫고 진입(숫자판 진입과 같은 패턴)
   numericMode = false;
   state.engActive = true;
@@ -849,6 +880,7 @@ function renderFavorites() {
 }
 
 function showFavorites() {
+  if (!isTemporaryMode()) baseModeIsEnglish = state.engActive;
   favoritesMode = true;
   renderFavorites();
   document.getElementById('fav-overlay').classList.add('show');
@@ -989,7 +1021,7 @@ function resetAll() {
     activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false,
     engActive:false, engShiftState:'off',
   };
-  numericMode = false; lastNonNumericMode = false;
+  numericMode = false; baseModeIsEnglish = false;
   lastCenterSwipeTime = 0;
   hideFavorites();
   updateKbdImage();
