@@ -270,12 +270,6 @@ function enterNumericMode() {
   render();
 }
 
-// 닫기 키(우측 스와이프 재사용): 진입 직전 상태가 아니라 기본 모드로 곧장 복귀한다 —
-// exitToBaseMode()와 동일한 목적지라 그대로 위임한다.
-function handleNumDismiss() {
-  exitToBaseMode();
-}
-
 // ── 좌표 (이미지 1421×778 픽셀 실측 기준 %) ──────────────────────────────
 const KEY_COLS = [1.55, 14.00, 26.39, 38.78, 51.16, 63.62, 76.14, 88.60];
 const KEY_ROWS = [3.09, 27.89, 52.44];
@@ -533,13 +527,15 @@ function handleCenterSwipe() {
   }
 }
 
-// 우측 1/3 스와이프: 숫자판이 꺼져 있으면 진입, 이미 떠 있으면 진입 전 모드로 복귀
-// (닫기 키와 동일한 동작) — 숫자판 안에서도 같은 스와이프로 다시 빠져나올 수 있어야 한다.
-// 상용구 패널이 열려 있는 동안 이 스와이프가 들어오면(예: 상용구를 고르려다 마음이
-// 바뀐 경우) 패널만 닫고 끝내지 않고 그대로 숫자판 진입까지 이어간다.
+// 우측 1/3 상하 스와이프: 무조건 숫자/기호 모드로 진입한다(대문자 모드의 더블스와이프와
+// 같은 원칙 — 이 제스처 자체에는 "나가기/복귀"가 없다. 나가는 건 가운데 스와이프 1회
+// 규칙(toggleEnglishMode → isTemporaryMode면 exitToBaseMode)이 맡는다). 이미 숫자판
+// 안이어도 다시 스와이프하면 그냥 숫자판을 유지한다(enterNumericMode의 이미-진입 가드로
+// 자연히 아무 일도 안 일어남). 상용구 패널이 열려 있었다면(예: 상용구를 고르려다 마음이
+// 바뀐 경우) 패널만 닫고 그대로 숫자판 진입까지 이어간다.
 function toggleNumericMode() {
   if (favoritesMode) hideFavorites();
-  if (numericMode) handleNumDismiss(); else enterNumericMode();
+  enterNumericMode();
 }
 
 function handleEngLetter(ch) {
