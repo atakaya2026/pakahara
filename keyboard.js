@@ -404,7 +404,15 @@ function makeBtn(cls, style, onClick, longPressText) {
       // 인식하도록 포인터를 붙잡아둔다(캡처해도 wrap까지의 버블링은 그대로 유지됨).
       try { b.setPointerCapture(e.pointerId); } catch (err) {}
       if (longPressText) {
-        longPressTimer = setTimeout(() => { longPressTimer = null; showLongPressHint(longPressText); }, LONG_PRESS_MS);
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          // 다른 손가락으로 딴 키를 눌러 그 사이 render()가 자판 전체를 다시 그렸다면
+          // (모든 입력마다 kbd.innerHTML을 통째로 비우고 새로 만든다) 이 버튼은 이미
+          // 화면에서 사라진 옛 인스턴스다 — 그 경우 pointerup이 이 버튼으로 다시는
+          // 안 와서 타이머가 못 지워지고 그대로 격발돼버렸다(두 손으로 자모를 빠르게
+          // 번갈아 칠 때 실제로 겪은 버그). 아직 화면에 붙어있는 버튼일 때만 안내를 띄운다.
+          if (b.isConnected) showLongPressHint(longPressText);
+        }, LONG_PRESS_MS);
         pendingLongPressCancel = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
       }
     });
