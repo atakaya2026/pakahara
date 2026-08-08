@@ -405,6 +405,10 @@ function runQueuedKeyCommits() {
   while (queuedKeyCommits.length) queuedKeyCommits.shift()();
 }
 
+// initSwipeGesture(아래) 안에 갇힌 activePointerId 등 wrap 레벨 제스처 상태를
+// resetAll()에서도 강제로 풀 수 있게 하는 훅 — IIFE가 자기 forceResetGesture를 등록한다.
+let resetSwipeGestureState = null;
+
 // 첫 실행 튜토리얼이 스와이프 존 동작을 가로챌 때 쓰는 훅. tutorial.js가 설정한다.
 // (zone, defaultFn) => 튜토리얼이 그 존을 기대하고 있으면 defaultFn()을 실행해 실제
 // 모드를 바꾸고, 아닌 존이면 defaultFn()을 호출하지 않아 모드 전환 자체를 막는다.
@@ -794,6 +798,7 @@ function handleSwipeDelete() {
 (function initSwipeGesture() {
   const wrap = document.getElementById('keyboard-wrap');
   let activePointerId = null;
+  let activePointerSetAt = 0;
   let startX = null, startY = null, triggered = false, zone = null;
   const SWIPE_MIN_PX = 28;       // 최소 이동 거리
   const SWIPE_V_H_RATIO = 1.3;   // 두 축 중 하나가 반대축보다 이 배 이상이어야 스와이프로 인정(대각선 오조작 방지)
@@ -806,11 +811,27 @@ function handleSwipeDelete() {
     return 'right';
   }
 
+  // 실기기에서 pointerup/cancel이 유실되면(이 파일 다른 곳에서도 이미 겪은 문제)
+  // activePointerId가 영원히 안 풀려서, 그 뒤로 이 손가락이 하나도 안 눌린 것처럼
+  // 보이는 wrap의 pointerdown 가드(아래) 때문에 스와이프 자체가 영구적으로
+  // 먹통이 됐었다("중앙 스와이프 무반응"). 다른 손가락의 새 pointerdown이 들어왔는데
+  // 추적 중이던 손가락이 일정 시간 지나도 안 풀렸다면 유실로 간주하고 강제로
+  // 상태를 정리한 뒤 새 손가락을 받는다.
+  function forceResetGesture() {
+    activePointerId = null; startX = null; startY = null; triggered = false; zone = null;
+    kbdGestureActive = false;
+    swipeInProgressPointerId = null;
+  }
+
   wrap.addEventListener('pointerdown', (e) => {
     // 상용구 패널이 열려 있어도 모든 스와이프를 그대로 통과시킨다 — 좌/중앙은 닫기/복귀,
     // 우측은 (예: 상용구를 고르려다 마음이 바뀐 경우) 패널을 닫고 그 모드로 바로 들어간다.
-    if (activePointerId !== null) return; // 이미 다른 포인터를 추적 중이면 무시(오조작 방지)
+    if (activePointerId !== null) {
+      if (Date.now() - activePointerSetAt < ACTIVE_KEY_STALE_MS) return; // 아직 진행 중일 수 있음 — 무시(오조작 방지)
+      forceResetGesture(); // 오래 안 풀림 = 유실로 보고 회복
+    }
     activePointerId = e.pointerId;
+    activePointerSetAt = Date.now();
     startX = e.clientX; startY = e.clientY;
     triggered = false;
     zone = zoneOf(e.clientX);
@@ -824,6 +845,16 @@ function handleSwipeDelete() {
     triggered = true;
     kbdGestureActive = true;
     swipeInProgressPointerId = e.pointerId; // render() 게이트에서 이 손가락만 예외로 친다
+    // 이 손가락이 스와이프를 시작한 키 버튼 위에서 눌렸었다면, 그 버튼은 이미
+    // pointerdown에서 자기 자신에게 setPointerCapture를 걸어놨다. 아래에서 wrap이
+    // 캡처를 가로채면 그 버튼은 이 손가락의 pointerup을 다시는 못 받는다(캡처를
+    // 가진 쪽으로 이벤트가 재대상되고, 그 버튼은 더 이상 캡처 대상이 아니므로 버블링도
+    // 안 됨) — 즉 downKeyPointers에서 이 손가락 항목이 영원히(1.5초 자연복구 전까지)
+    // 안 지워져 render()가 그동안 막혀서, 배경 이미지(updateKbdImage)는 이미 바뀌었는데
+    // 자판 오버레이(#kbd, 라벨)는 옛 모드로 계속 남아 두 모드가 겹쳐 보이는 버그가
+    // 됐었다. 캡처를 가로채는 바로 이 순간 직접 지워서 그 유예 시간 자체를 없앤다.
+    downKeyPointers.delete(e.pointerId);
+    if (activeKeyPointerId === e.pointerId) { activeKeyPointerId = null; runQueuedKeyCommits(); }
     if (pendingLongPressCancel) { pendingLongPressCancel(); pendingLongPressCancel = null; }
     try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
   }
@@ -865,6 +896,11 @@ function handleSwipeDelete() {
   }
   wrap.addEventListener('pointerup', endGesture);
   wrap.addEventListener('pointercancel', endGesture);
+
+  // resetAll()이 "제스처 추적이 꼬여 있어도 리셋으로는 항상 풀리게" 하려면 이
+  // IIFE 안에 갇힌 activePointerId 등도 같이 정리해야 한다 — forceResetGesture를
+  // 바깥에서 부를 수 있게 전역 훅에 등록해둔다.
+  resetSwipeGestureState = forceResetGesture;
 })();
 
 function render() {
@@ -1112,6 +1148,7 @@ function renderDevanagari() {
 function resetAll() {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
   kbdGestureActive = false; // 혹시 제스처 추적이 꼬여 키 입력이 막혀 있었더라도 리셋으로는 항상 풀리도록
+  if (resetSwipeGestureState) resetSwipeGestureState();
   setText('');
   state = {
     activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false,
