@@ -211,7 +211,7 @@ html, body {
   text-align: center;
 }
 #tutorial-banner.shake { animation: tut-shake 0.4s; }
-#tutorial-text { color: #f5f0e8; font-weight: 700; font-size: clamp(16px, 5.6vw, 24px); line-height: 1.4; }
+#tutorial-text { color: #f5f0e8; font-weight: 700; font-size: clamp(16px, 5.2vw, 22px); line-height: 1.4; }
 
 /* 스와이프 존 안내: 좌/중/우 1/3 구역 중 지금 안내 중인 구역 위로 옮겨져서, 스페이스바
    보다 살짝 위에서 시작한 엄지가 위로 살짝 스치듯 지나가는 걸 한 번만 보여준다(반복 X).
