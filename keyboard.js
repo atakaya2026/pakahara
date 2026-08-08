@@ -506,22 +506,29 @@ function toggleEnglishMode() {
 // 가운데 1/3 스와이프. 규칙은 단순하다: 짧은 시간 안에 연이어 두 번이면 이전에 뭘
 // 하고 있었든 상관없이 무조건 대문자(약어) 모드로 진입하고(enterShortformMode),
 // 그게 아니면(1회) toggleEnglishMode — 힌디/영문이면 토글, 숫자판/상용구면 그냥
-// 나가기 — 을 그대로 부른다. 약어 모드도 engActive===true인 상태일 뿐이라 "영문이면
-// 토글"에 자연히 걸려서, 약어 모드 중 1회 스와이프는 항상 힌디로 돌아간다(예전엔
-// 진입 직전 상태를 기억했다가 복원해서 나가는 곳이 매번 달라졌는데, 그게 오히려
-// 헷갈린다는 피드백을 받고 "무조건 힌디로"로 단순화했다).
-// 스와이프는 탭과 달리 손을 뗐다가 다시 짚어야 두 번째가 인정되는데, 그 "떼고
-// 다시 짚기"에는 700ms가 너무 빠듯해서 대부분 놓치고 매번 단일 스와이프로만
-// 처리돼버렸던 적이 있어 여유 있게 늘려뒀다.
+// 나가기 — 을 그대로 부른다.
+// 함정 하나: 더블스와이프의 첫 스와이프도 "1회"로 먼저 처리되면서 toggleEnglishMode가
+// 곧바로 힌디/영문을 뒤집어버린다. 그래서 힌디에서 더블스와이프를 하면 ― 1차 스와이프가
+// 힌디→영문으로 토글해놓은 다음, 2차 스와이프가 "지금 상태(영문)"를 기본 모드로
+// 잘못 저장해버려서, 나중에 대문자에서 나가면 힌디가 아니라 영문으로 돌아가는 버그가
+// 있었다. 그래서 1회 스와이프 시점에 아직 기본 모드였다면(임시 모드가 아니었다면)
+// toggleEnglishMode가 뒤집기 "직전" 값을 centerSwipeBaseSnapshot에 따로 적어뒀다가,
+// 두 번째 스와이프가 대문자 모드로 확정될 때 이 값을 넘겨준다(state.engActive를 그
+// 시점에 다시 읽으면 이미 1차 스와이프가 바꿔놓은 뒤라 늦다). 이미 임시 모드였다면
+// 1차 스와이프가 exitToBaseMode로 알아서 기본 모드를 복원해두므로 스냅샷이 필요 없다
+// (null로 표시해두면 enterShortformMode가 그 시점의 state.engActive를 그대로 쓴다).
 let lastCenterSwipeTime = 0;
+let centerSwipeBaseSnapshot = null;
 const CENTER_DOUBLE_SWIPE_MS = 1500;
 function handleCenterSwipe() {
   const now = Date.now();
   if (now - lastCenterSwipeTime < CENTER_DOUBLE_SWIPE_MS) {
     lastCenterSwipeTime = 0; // 세 번째 연속 스와이프가 또 더블로 잡히지 않도록
-    enterShortformMode();
+    enterShortformMode(centerSwipeBaseSnapshot);
+    centerSwipeBaseSnapshot = null;
   } else {
     lastCenterSwipeTime = now;
+    centerSwipeBaseSnapshot = isTemporaryMode() ? null : state.engActive;
     toggleEnglishMode();
   }
 }
@@ -591,9 +598,13 @@ function isShortformActive() {
   return !numericMode && state.engActive && state.engShiftState === 'lock';
 }
 
-function enterShortformMode() {
+// baseSnapshot: handleCenterSwipe가 더블스와이프의 첫 스와이프 "직전" 기본 모드 여부를
+// 미리 적어뒀다가 넘겨준다(불리언). null/undefined면 지금 이 순간의 state.engActive를
+// 대신 쓴다(이미 임시 모드였다가 진입하는 경우 등, 첫 스와이프가 따로 기록하지 않은 케이스).
+function enterShortformMode(baseSnapshot) {
   if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
-  if (!isTemporaryMode()) baseModeIsEnglish = state.engActive;
+  if (typeof baseSnapshot === 'boolean') baseModeIsEnglish = baseSnapshot;
+  else if (!isTemporaryMode()) baseModeIsEnglish = state.engActive;
   if (favoritesMode) hideFavorites(); // 상용구 패널이 떠 있었다면 닫고 진입(숫자판 진입과 같은 패턴)
   numericMode = false;
   state.engActive = true;
@@ -1023,6 +1034,7 @@ function resetAll() {
   };
   numericMode = false; baseModeIsEnglish = false;
   lastCenterSwipeTime = 0;
+  centerSwipeBaseSnapshot = null;
   hideFavorites();
   updateKbdImage();
   render();
