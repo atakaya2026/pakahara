@@ -61,6 +61,11 @@ let state = {
 // hideFavorites 두 함수에만 플래그 관리를 몰아두고 나머지는 그 함수를 거치게 한다.
 let favoritesMode = false;
 
+// 이번 런칭(무료) 버전에서는 상용구 기능 자체를 잠가둔다 — 좌측 스와이프 트리거만
+// 막고 나머지(showFavorites/hideFavorites/renderFavorites, 상용구 데이터, 편집 화면 등)는
+// 전부 그대로 남겨둔다. 다음(유료) 버전에서 이 값만 true로 바꾸면 그대로 다시 켜진다.
+const FAVORITES_ENABLED = false;
+
 // ── 숫자/기호 자판 상태 ──
 let numericMode = false;
 
@@ -835,7 +840,11 @@ function handleSwipeDelete() {
     if (Math.abs(dy) < SWIPE_MIN_PX) return;
     if (Math.abs(dy) < Math.abs(dx) * SWIPE_V_H_RATIO) return;
     armGesture(e);
-    if (zone === 'left') runZoneAction('left', toggleFavoritesMode);
+    // 스와이프 자체(제스처 확정, 포인터 캡처, 키 입력과의 경합 정리)는 항상 그대로
+    // 처리한다 — FAVORITES_ENABLED가 꺼져 있을 땐 그냥 이 좌측 스와이프에 묶인 동작이
+    // 없을 뿐이다(조용히 아무 일도 안 일어남 — 무료 버전에 이 기능이 있다는 티를 내지
+    // 않기 위함).
+    if (zone === 'left') { if (FAVORITES_ENABLED) runZoneAction('left', toggleFavoritesMode); }
     else if (zone === 'center') runZoneAction('center', toggleEnglishMode);
     else runZoneAction('right', toggleNumericMode);
   });

@@ -6,14 +6,11 @@
 // state/HIT_COLS/HIT_ROWS/consonantGroups/render() 등을
 // 그대로 참조한다.
 
-// 새로 추가된 멘트(leftSwipe/deleteSwipe)는 일단 한글 그대로 두고
-// 나중에 힌디어로 교체한다. 나머지는 기존 힌디어 멘트를 그대로 쓴다.
 const TUT = {
   welcome:      'स्वागत है! आइए, इसका आसान तरीका सीखें।',
   centerSwipe1: 'अब कीबोर्ड के बीच से ऊपर स्वाइप करें।',
   centerSwipe2: 'शाबाश! यह हिंदी और अंग्रेजी के बीच बदलने के लिए है। एक बार फिर स्वाइप करें।',
   rightSwipe:   'बहुत बढ़िया! अब दाईं तरफ से ऊपर की ओर स्वाइप करें।',
-  leftSwipe:    'बायां स्वाइप: सहेजे गए वाक्यांश मोड',
   typeKha:      "अब 'ख' टाइप करें।",
   typeKhi:      "अब 'ख' के बाद 'ी' टाइप करें।",
   tapAgain:     'एक बार और दबाएं।',
@@ -23,10 +20,11 @@ const TUT = {
 
 // 스와이프 존 단계에서 각 단계가 기다리는 존. 여기 없는 단계(조합 단계 등)에서는
 // 어떤 스와이프가 와도 막고 흔들기만 한다. 'delete'는 세로 우측 스와이프(숫자판)와
-// 구분하기 위해 keyboard.js가 삭제 스와이프에만 붙이는 전용 태그다.
+// 구분하기 위해 keyboard.js가 삭제 스와이프에만 붙이는 전용 태그다. 상용구(left)는
+// 이번 무료 런칭 버전에서 잠가둬서(keyboard.js의 FAVORITES_ENABLED) 튜토리얼에서도 뺐다.
 const ZONE_STEP_TARGET = {
   'center-1': 'center', 'center-2': 'center',
-  'right-1': 'right', 'left-1': 'left', 'delete-1': 'delete',
+  'right-1': 'right', 'delete-1': 'delete',
 };
 const ZONE_RECT = {
   left:   { left: '0%',      width: '33.333%' },
@@ -35,7 +33,7 @@ const ZONE_RECT = {
 };
 
 let tutorialActive = false;
-// 'center-1' | 'center-2' | 'right-1' | 'left-1' |
+// 'center-1' | 'center-2' | 'right-1' |
 // 'kha-cons' | 'kha-next' | 'khi-1' | 'khi-2' | 'delete-1' | 'outro'
 let tutorialStep = null;
 const els = {};
@@ -218,22 +216,16 @@ function advanceZoneStep() {
 
   } else if (tutorialStep === 'right-1') {
     setProgress(2);
-    tutorialStep = 'left-1';
-    showZoneStep('left', TUT.leftSwipe);
-
-  } else if (tutorialStep === 'left-1') {
-    setProgress(3);
-    // 상용구 패널이 실제로 열리는 걸 눈으로 보여줘야 하니, 곧장 조합 단계로 넘어가지
-    // 않고 잠깐 그대로 보여준 뒤에 닫는다 — beginComposeSteps()의 resetAll()이 패널을
-    // 곧바로 닫아버려서, 지연 없이 바로 부르면 열렸다가 닫히는 게 한 프레임도 안
-    // 그려진 채(같은 동기 실행 안에서) 지나가 버렸었다.
+    // 숫자판이 실제로 뜬 걸 눈으로 확인할 시간을 주고 나서 조합 단계로 넘어간다 —
+    // beginComposeSteps()의 resetAll()이 곧바로 힌디로 돌려버리므로, 지연 없이 바로
+    // 부르면 확인할 새도 없이 사라져버린다.
     setTimeout(beginComposeSteps, 1800);
 
   } else if (tutorialStep === 'delete-1') {
     // 진행 점은 이미지(tutorial.png)에 5개가 이미 그려져 있는데(#tutorial-progress의
-    // CSS 주석 참고) 대문자 단계를 뺀 지금은 실제 스와이프 마일스톤이 4개뿐이다.
-    // 이미지를 다시 그리지 않고도 점 하나가 끝까지 안 채워진 채로 남는 걸 피하려고,
-    // 마지막 단계(삭제)에서 남은 점 두 개를 한꺼번에 채운다.
+    // CSS 주석 참고) 대문자·상용구를 뺀 지금은 실제 스와이프 마일스톤이 3개(토글/숫자/
+    // 삭제)뿐이다. 이미지를 다시 그리지 않고도 점이 끝까지 안 채워진 채로 남는 걸
+    // 피하려고, 마지막 단계(삭제)에서 남은 점을 한꺼번에 채운다.
     setProgress(5);
     finishTutorial();
   }
