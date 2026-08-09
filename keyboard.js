@@ -616,14 +616,12 @@ function handleCenterSwipe() {
   }
 }
 
-// 우측 1/3 상하 스와이프: 무조건 숫자/기호 모드로 진입한다(대문자 모드의 더블스와이프와
-// 같은 원칙 — 이 제스처 자체에는 "나가기/복귀"가 없다. 나가는 건 가운데 스와이프 1회
-// 규칙(toggleEnglishMode → isTemporaryMode면 exitToBaseMode)이 맡는다). 이미 숫자판
-// 안이어도 다시 스와이프하면 그냥 숫자판을 유지한다(enterNumericMode의 이미-진입 가드로
-// 자연히 아무 일도 안 일어남). 상용구 패널이 열려 있었다면(예: 상용구를 고르려다 마음이
-// 바뀐 경우) 패널만 닫고 그대로 숫자판 진입까지 이어간다.
+// 우측 1/3 상하 스와이프: 상용구(좌측)와 같은 토글 패턴 — 아무 판도 안 떠 있으면
+// 숫자판으로 진입하고, 이미 판(숫자판이든, 그 위에 얹힌 상용구든)이 떠 있으면 이번
+// 스와이프는 "나가기"로 취급해 항상 그 전의 기본 모드(힌디/영문)로 곧장 복귀한다 —
+// 판끼리 서로 넘나드는 것("숫자판으로 되돌아가기" 등)은 없다.
 function toggleNumericMode() {
-  if (favoritesMode) hideFavorites();
+  if (favoritesMode || numericMode) { exitToBaseMode(); return; }
   enterNumericMode();
 }
 
