@@ -586,12 +586,17 @@ function toggleEnglishMode() {
   if (state.engActive) exitEnglishMode(); else enterEnglishMode();
 }
 
-// 우측 1/3 상하 스와이프: 상용구(좌측)와 같은 토글 패턴 — 아무 판도 안 떠 있으면
-// 숫자판으로 진입하고, 이미 판(숫자판이든, 그 위에 얹힌 상용구든)이 떠 있으면 이번
-// 스와이프는 "나가기"로 취급해 항상 그 전의 기본 모드(힌디/영문)로 곧장 복귀한다 —
-// 판끼리 서로 넘나드는 것("숫자판으로 되돌아가기" 등)은 없다.
+// 우측 1/3 상하 스와이프: "나가기(복귀)"인지는 지금 화면에 실제로 보이는 게 뭔지로
+// 판정한다 — numericMode가 배경에서 true라도 상용구 패널이 그 위에 얹혀 있으면 지금
+// 보이는 건 상용구지 숫자판이 아니므로, 그 상태의 우측 스와이프는 "숫자판 재스와이프"가
+// 아니라 그냥 "숫자 스와이프"(진입)다. 그래서 상용구가 열려 있는지부터 먼저 본다.
+// 상용구가 안 보이는 상태에서만 numericMode 자체를 "지금 숫자판이 보이는 중"으로 보고
+// 재스와이프=나가기로 취급한다. 좌측(toggleFavoritesMode)은 자기 자신(favoritesMode)의
+// 판정만으로 충분한데, 그건 상용구가 항상 최상단에 얹히는 패널이라 "지금 보이는 것"과
+// "그 상태 플래그"가 늘 일치하기 때문이다.
 function toggleNumericMode() {
-  if (favoritesMode || numericMode) { exitToBaseMode(); return; }
+  if (favoritesMode) { hideFavorites(); enterNumericMode(); return; }
+  if (numericMode) { exitToBaseMode(); return; }
   enterNumericMode();
 }
 
