@@ -3,16 +3,15 @@
 // 법을 몸으로 익힌다.
 // 2단계: 자음(क→ख) + 모음 멀티탭(ी)을 실제로 조합해본다.
 // keyboard.js와 같은 전역 스코프를 공유하므로(둘 다 모듈이 아닌 일반 <script>),
-// state/HIT_COLS/HIT_ROWS/consonantGroups/render()/isShortformActive() 등을
+// state/HIT_COLS/HIT_ROWS/consonantGroups/render() 등을
 // 그대로 참조한다.
 
-// 새로 추가된 멘트(capsDouble/leftSwipe/deleteSwipe)는 일단 한글 그대로 두고
+// 새로 추가된 멘트(leftSwipe/deleteSwipe)는 일단 한글 그대로 두고
 // 나중에 힌디어로 교체한다. 나머지는 기존 힌디어 멘트를 그대로 쓴다.
 const TUT = {
   welcome:      'स्वागत है! आइए, इसका आसान तरीका सीखें।',
   centerSwipe1: 'अब कीबोर्ड के बीच से ऊपर स्वाइप करें।',
   centerSwipe2: 'शाबाश! यह हिंदी और अंग्रेजी के बीच बदलने के लिए है। एक बार फिर स्वाइप करें।',
-  capsDouble:   '2번 연속 스와이프를 하면 약어 모드로 됩니다.',
   rightSwipe:   'बहुत बढ़िया! अब दाईं तरफ से ऊपर की ओर स्वाइप करें।',
   leftSwipe:    '왼쪽에서 스와이프를 하면 상용구가 호출됩니다.',
   typeKha:      "अब 'ख' टाइप करें।",
@@ -26,7 +25,7 @@ const TUT = {
 // 어떤 스와이프가 와도 막고 흔들기만 한다. 'delete'는 세로 우측 스와이프(숫자판)와
 // 구분하기 위해 keyboard.js가 삭제 스와이프에만 붙이는 전용 태그다.
 const ZONE_STEP_TARGET = {
-  'center-1': 'center', 'center-2': 'center', 'caps-double': 'center',
+  'center-1': 'center', 'center-2': 'center',
   'right-1': 'right', 'left-1': 'left', 'delete-1': 'delete',
 };
 const ZONE_RECT = {
@@ -36,7 +35,7 @@ const ZONE_RECT = {
 };
 
 let tutorialActive = false;
-// 'center-1' | 'center-2' | 'caps-double' | 'right-1' | 'left-1' |
+// 'center-1' | 'center-2' | 'right-1' | 'left-1' |
 // 'kha-cons' | 'kha-next' | 'khi-1' | 'khi-2' | 'delete-1' | 'outro'
 let tutorialStep = null;
 const els = {};
@@ -105,13 +104,12 @@ function setProgress(n) {
 const READ_DELAY_MS = 2000;
 let thumbTimer = null;
 
-// 예약해둔 자동 시범 재생(thumbTimer/capsDemoTimer)을 한꺼번에 취소한다. 유저가 이미
-// 실제로 스와이프해서 다음 화면으로 넘어갔거나 다른 피드백이 즉시 나가는 상황인데
-// 예전 단계에서 걸어둔 타이머가 나중에 뒤늦게 발동하면, 이미 지나간 단계의 애니메이션이
-// 뜬금없이 다시 튀어나오는 것처럼 보인다 — 그래서 새로 뭔가 보여줄 때마다 항상 먼저 정리한다.
+// 예약해둔 자동 시범 재생(thumbTimer)을 취소한다. 유저가 이미 실제로 스와이프해서
+// 다음 화면으로 넘어갔거나 다른 피드백이 즉시 나가는 상황인데 예전 단계에서 걸어둔
+// 타이머가 나중에 뒤늦게 발동하면, 이미 지나간 단계의 애니메이션이 뜬금없이 다시
+// 튀어나오는 것처럼 보인다 — 그래서 새로 뭔가 보여줄 때마다 항상 먼저 정리한다.
 function clearThumbTimers() {
   if (thumbTimer) { clearTimeout(thumbTimer); thumbTimer = null; }
-  if (capsDemoTimer) { clearTimeout(capsDemoTimer); capsDemoTimer = null; }
 }
 
 // 지금 단계에서 "다시 보여줘야 할" 애니메이션 함수 — 오답 피드백/자동재생이 공용으로
@@ -134,18 +132,6 @@ function showZoneStep(zone, text) {
   els.swipeBgArrow.classList.remove('horiz', 'play');
   currentReplayFn = playThumb;
   clearThumbTimers();
-  thumbTimer = setTimeout(currentReplayFn, READ_DELAY_MS);
-}
-
-// 대문자(약어) 단계 전용 셋업. 메시지가 "2번 연속 스와이프"를 설명하므로, 유저가
-// 시도하기도 전에 시범 자체를 스와이프 두 번으로 보여준다(playCapsDemo). 존/엄지
-// 방향은 가운데 스와이프와 같아서 showZoneStep과 거의 같지만 재생 함수만 다르다.
-function showCapsDoubleStep() {
-  showZoneStep('center', TUT.capsDouble); // 존/엄지/화살표 세팅 재사용
-  // showZoneStep이 이미 playThumb(단일 재생) 타이머를 예약해뒀으니, 그걸 취소하고
-  // 이 단계 전용 재생 함수(playCapsDemo, 2회 재생)로 다시 예약한다.
-  clearThumbTimers();
-  currentReplayFn = playCapsDemo;
   thumbTimer = setTimeout(currentReplayFn, READ_DELAY_MS);
 }
 
@@ -197,17 +183,6 @@ function playThumbHorizontal() {
   els.swipeBgArrow.classList.add('play');
 }
 
-// "2번 연속 스와이프"를 유저가 시도하기 전에 미리 시범으로 보여준다 — 손을 뗐다가
-// 다시 짚는 리듬을 흉내내려고 짧은 간격(CAPS_DEMO_GAP_MS)을 두고 playThumb을 두 번
-// 잇달아 재생한다. 오답 피드백이나 첫 스와이프 후 재시도 안내에도 이 함수를 그대로 쓴다.
-const CAPS_DEMO_GAP_MS = 550;
-let capsDemoTimer = null;
-function playCapsDemo() {
-  if (capsDemoTimer) clearTimeout(capsDemoTimer);
-  playThumb();
-  capsDemoTimer = setTimeout(playThumb, CAPS_DEMO_GAP_MS);
-}
-
 function shakeBanner() {
   els.banner.classList.remove('shake');
   void els.banner.offsetWidth; // 리플로우를 강제해 같은 애니메이션을 다시 재생시킨다
@@ -234,40 +209,20 @@ function handleZoneSwipe(zone, defaultFn) {
 function advanceZoneStep() {
   if (tutorialStep === 'center-1') {
     tutorialStep = 'center-2';
-    // center-1의 스와이프가 남긴 타이밍이 center-2의 스와이프와 우연히 더블로 묶이면
-    // (윈도우가 1.5초라 유저가 좀 빠르게 반응하면 실제로 일어난다) center-2에서 아직
-    // 배우지도 않은 약어 모드가 미리 켜져버린다. 매 center 단계 진입마다 리셋해서
-    // 이전 단계의 스와이프가 다음 단계로 새어 들어가지 않게 한다.
-    lastCenterSwipeTime = 0;
     showZoneStep('center', TUT.centerSwipe2);
 
   } else if (tutorialStep === 'center-2') {
     setProgress(1);
-    tutorialStep = 'caps-double';
-    lastCenterSwipeTime = 0; // 위와 같은 이유로, caps-double 진입 시점에도 다시 리셋
-
-    showCapsDoubleStep();
-
-  } else if (tutorialStep === 'caps-double') {
-    // handleCenterSwipe(keyboard.js)가 단일/연속 2회 스와이프 판정을 이미 갖고 있어서,
-    // 여기선 매 스와이프를 그냥 통과시키고 실제로 약어 모드에 들어갔는지(isShortformActive)만
-    // 보고 다음 단계로 넘어갈지 정한다. 안 들어갔으면 방금 건 첫 스와이프였다는 뜻인데,
-    // 유저가 방금 자기 손으로 스와이프한 것 자체가(실제 언어 토글이 눈에 보이니) 충분한
-    // 피드백이라 여기서 시범 애니메이션을 또 재생하지 않는다 — 재생하면 "왜 자꾸 또
-    // 나오지" 하고 헷갈린다. 조용히 두 번째 스와이프를 기다린다.
-    if (isShortformActive()) {
-      setProgress(2);
-      tutorialStep = 'right-1';
-      showZoneStep('right', TUT.rightSwipe);
-    }
+    tutorialStep = 'right-1';
+    showZoneStep('right', TUT.rightSwipe);
 
   } else if (tutorialStep === 'right-1') {
-    setProgress(3);
+    setProgress(2);
     tutorialStep = 'left-1';
     showZoneStep('left', TUT.leftSwipe);
 
   } else if (tutorialStep === 'left-1') {
-    setProgress(4);
+    setProgress(3);
     // 상용구 패널이 실제로 열리는 걸 눈으로 보여줘야 하니, 곧장 조합 단계로 넘어가지
     // 않고 잠깐 그대로 보여준 뒤에 닫는다 — beginComposeSteps()의 resetAll()이 패널을
     // 곧바로 닫아버려서, 지연 없이 바로 부르면 열렸다가 닫히는 게 한 프레임도 안
@@ -275,6 +230,10 @@ function advanceZoneStep() {
     setTimeout(beginComposeSteps, 1800);
 
   } else if (tutorialStep === 'delete-1') {
+    // 진행 점은 이미지(tutorial.png)에 5개가 이미 그려져 있는데(#tutorial-progress의
+    // CSS 주석 참고) 대문자 단계를 뺀 지금은 실제 스와이프 마일스톤이 4개뿐이다.
+    // 이미지를 다시 그리지 않고도 점 하나가 끝까지 안 채워진 채로 남는 걸 피하려고,
+    // 마지막 단계(삭제)에서 남은 점 두 개를 한꺼번에 채운다.
     setProgress(5);
     finishTutorial();
   }

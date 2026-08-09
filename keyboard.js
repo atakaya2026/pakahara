@@ -586,36 +586,6 @@ function toggleEnglishMode() {
   if (state.engActive) exitEnglishMode(); else enterEnglishMode();
 }
 
-// 가운데 1/3 스와이프. 규칙은 단순하다: 짧은 시간 안에 연이어 두 번이면 이전에 뭘
-// 하고 있었든 상관없이 무조건 대문자(약어) 모드로 진입하고(enterShortformMode),
-// 그게 아니면(1회) toggleEnglishMode — 힌디/영문이면 토글, 숫자판/상용구면 그냥
-// 나가기 — 을 그대로 부른다.
-// 함정 하나: 더블스와이프의 첫 스와이프도 "1회"로 먼저 처리되면서 toggleEnglishMode가
-// 곧바로 힌디/영문을 뒤집어버린다. 그래서 힌디에서 더블스와이프를 하면 ― 1차 스와이프가
-// 힌디→영문으로 토글해놓은 다음, 2차 스와이프가 "지금 상태(영문)"를 기본 모드로
-// 잘못 저장해버려서, 나중에 대문자에서 나가면 힌디가 아니라 영문으로 돌아가는 버그가
-// 있었다. 그래서 1회 스와이프 시점에 아직 기본 모드였다면(임시 모드가 아니었다면)
-// toggleEnglishMode가 뒤집기 "직전" 값을 centerSwipeBaseSnapshot에 따로 적어뒀다가,
-// 두 번째 스와이프가 대문자 모드로 확정될 때 이 값을 넘겨준다(state.engActive를 그
-// 시점에 다시 읽으면 이미 1차 스와이프가 바꿔놓은 뒤라 늦다). 이미 임시 모드였다면
-// 1차 스와이프가 exitToBaseMode로 알아서 기본 모드를 복원해두므로 스냅샷이 필요 없다
-// (null로 표시해두면 enterShortformMode가 그 시점의 state.engActive를 그대로 쓴다).
-let lastCenterSwipeTime = 0;
-let centerSwipeBaseSnapshot = null;
-const CENTER_DOUBLE_SWIPE_MS = 1500;
-function handleCenterSwipe() {
-  const now = Date.now();
-  if (now - lastCenterSwipeTime < CENTER_DOUBLE_SWIPE_MS) {
-    lastCenterSwipeTime = 0; // 세 번째 연속 스와이프가 또 더블로 잡히지 않도록
-    enterShortformMode(centerSwipeBaseSnapshot);
-    centerSwipeBaseSnapshot = null;
-  } else {
-    lastCenterSwipeTime = now;
-    centerSwipeBaseSnapshot = isTemporaryMode() ? null : state.engActive;
-    toggleEnglishMode();
-  }
-}
-
 // 우측 1/3 상하 스와이프: 상용구(좌측)와 같은 토글 패턴 — 아무 판도 안 떠 있으면
 // 숫자판으로 진입하고, 이미 판(숫자판이든, 그 위에 얹힌 상용구든)이 떠 있으면 이번
 // 스와이프는 "나가기"로 취급해 항상 그 전의 기본 모드(힌디/영문)로 곧장 복귀한다 —
@@ -657,7 +627,14 @@ function handleShiftTap() {
   if (shiftTapTimer) {
     clearTimeout(shiftTapTimer);
     shiftTapTimer = null;
-    state.engShiftState = state.engShiftState === 'lock' ? 'off' : 'lock';
+    // 캡스락으로 잠그는(off/once -> lock) 순간이 곧 임시 모드(대문자)로 "진입"하는
+    // 순간이다 — 숫자판/상용구 진입 때와 똑같이, 아직 임시 모드가 아니었을 때만 지금의
+    // engActive를 진짜 기본 모드로 기억해둔다. 안 그러면 나중에 중앙 스와이프로 나갈 때
+    // exitToBaseMode가 옛 기억(대개 힌디)을 써버려서, 영문 기본에서 캡스락을 걸었다가
+    // 나가면 엉뚱하게 힌디로 돌아가 버린다.
+    const lockingOn = state.engShiftState !== 'lock';
+    if (lockingOn && !isTemporaryMode()) baseModeIsEnglish = state.engActive;
+    state.engShiftState = lockingOn ? 'lock' : 'off';
     render();
     return;
   }
@@ -668,35 +645,12 @@ function handleShiftTap() {
   }, 300);
 }
 
-// 가운데 1/3 연속 2회 스와이프(handleCenterSwipe) 전용 — "약어 모드" 진입. 힌디/영문/
-// 숫자/상용구 어느 상태에 있었든 상관없이 곧장 영문 대문자(시프트락) 상태로 보낸다 —
-// 인도에서 약어를 대문자로 쓰는 관행을 반영해 "영문 모드"와는 별개 개념으로 취급하지만
-// 실제로는 engActive+lock 상태일 뿐이다. 나가는 분기는 따로 없다 — 약어 모드도
-// engActive===true지만 isTemporaryMode()가 걸러내므로 toggleEnglishMode의 1회 스와이프
-// 규칙에서는 "그냥 영문"이 아니라 "임시 모드"로 취급돼 exitToBaseMode()로 나간다(대문자
-// 모드 자신도 진입 전 기본 모드를 정확히 기억하고 있다가 그리로 돌아간다). 물리
-// 시프트키로도 대문자를 풀 수 있다(기존 handleShiftTap, engShiftState만 바꿀 뿐 모드
-// 자체는 안 나간다).
+// 물리 Shift 키 더블탭(handleShiftTap)으로만 도달하는 캡스락 상태. engActive===true인
+// 상태 중 하나지만 isTemporaryMode()가 이걸 "그냥 영문"과 구분해줘서, toggleEnglishMode의
+// 1회 스와이프 규칙에서 "임시 모드"로 취급돼 exitToBaseMode()로 나간다(진입 전 기본
+// 모드를 정확히 기억하고 있다가 그리로 돌아간다).
 function isShortformActive() {
   return !numericMode && state.engActive && state.engShiftState === 'lock';
-}
-
-// baseSnapshot: handleCenterSwipe가 더블스와이프의 첫 스와이프 "직전" 기본 모드 여부를
-// 미리 적어뒀다가 넘겨준다(불리언). null/undefined면 지금 이 순간의 state.engActive를
-// 대신 쓴다(이미 임시 모드였다가 진입하는 경우 등, 첫 스와이프가 따로 기록하지 않은 케이스).
-function enterShortformMode(baseSnapshot) {
-  if (shiftTapTimer) { clearTimeout(shiftTapTimer); shiftTapTimer = null; }
-  if (typeof baseSnapshot === 'boolean') baseModeIsEnglish = baseSnapshot;
-  else if (!isTemporaryMode()) baseModeIsEnglish = state.engActive;
-  if (favoritesMode) hideFavorites(); // 상용구 패널이 떠 있었다면 닫고 진입(숫자판 진입과 같은 패턴)
-  numericMode = false;
-  state.engActive = true;
-  state.engShiftState = 'lock';
-  state.activeRoot = null; state.activeCharIdx = 0;
-  state.lastSignKey = null; state.signTapIdx = 0;
-  state.independentMode = false;
-  updateKbdImage();
-  render();
 }
 
 function renderEng() {
@@ -783,7 +737,7 @@ function handleSwipeDelete() {
 }
 
 // ── 간편 모드 전환: 자판 영역을 좌/중/우 1/3로 나눠 각 구역의 스와이프에 서로 다른
-// 동작을 배정한다 (좌: 상용구, 중앙: 힌디↔영문(1회)/약어모드(연속 2회), 우: 세로
+// 동작을 배정한다 (좌: 상용구, 중앙: 힌디↔영문 토글, 우: 세로
 // 스와이프=숫자/기호, 좌향 가로 스와이프=삭제). 세로는 방향 상관없이 일정 거리 이상
 // 이동하면 발동하는 예전 방식 그대로이고, 가로(삭제)는 우측 1/3에서만, 왼쪽으로
 // 일정 거리 이상 이동해야 발동한다.
@@ -877,7 +831,7 @@ function handleSwipeDelete() {
     if (Math.abs(dy) < Math.abs(dx) * SWIPE_V_H_RATIO) return;
     armGesture(e);
     if (zone === 'left') runZoneAction('left', toggleFavoritesMode);
-    else if (zone === 'center') runZoneAction('center', handleCenterSwipe);
+    else if (zone === 'center') runZoneAction('center', toggleEnglishMode);
     else runZoneAction('right', toggleNumericMode);
   });
 
@@ -1153,8 +1107,6 @@ function resetAll() {
     engActive:false, engShiftState:'off',
   };
   numericMode = false; baseModeIsEnglish = false;
-  lastCenterSwipeTime = 0;
-  centerSwipeBaseSnapshot = null;
   activeKeyPointerId = null; activeKeyPointerSetAt = 0; queuedKeyCommits = [];
   downKeyPointers.clear(); swipeInProgressPointerId = null; renderPending = false;
   hideFavorites();
