@@ -39,7 +39,7 @@ const rightKeys = [
   [
     { id:'N', type:'sign', chars:['्','़'], indep:['卐','卍'] },
     { id:'M', type:'sign', chars:['ु','ू','ृ'], indep:['उ','ऊ','ऋ'] },
-    { id:'DANDA', type:'danda' }, // 삭제키 폐지, 그 자리로 danda(।/॥/…/.)가 이동
+    { id:'BS', type:'bs' }, // 삭제키 부활 — danda(।/॥/…)는 하단바 쉼표 자리로 이동
   ],
 ];
 
@@ -90,8 +90,16 @@ let editorAdapter = {
     const el = document.getElementById('editor');
     if (!el) return;
     el.dataset.text = t;
-    const esc = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    el.innerHTML = esc + `<span class="cursor">|</span>`;
+    // 맨 끝 공란은 힌디 모드에서만 아직 "확정"되지 않은 상태다 — 독립모음이 뒤따르면
+    // 그 모음으로 대체될 수 있어서다(independentActive() 참고). 영문/숫자 모드는
+    // 독립모음 개념이 없어 스페이스가 찍히는 즉시 확정이므로 그냥 보통 공백으로 보여준다.
+    // 이후 뭔가 더 입력되면(그 공란이 더는 마지막 글자가 아니게 되면) 이 함수가 다시
+    // 불릴 때 자연히 보통 공백으로 그려진다 — 별도 "확정" 처리가 필요 없다.
+    const pending = t.endsWith(' ') && !numericMode && !state.engActive;
+    const body = pending ? t.slice(0, -1) : t;
+    const esc = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const dot = pending ? `<span class="pending-space-dot">•</span>` : '';
+    el.innerHTML = esc + dot + `<span class="cursor">▏</span>`;
   },
 };
 function KB_setEditorAdapter(adapter) { editorAdapter = adapter; }
@@ -140,6 +148,21 @@ function handleNext() {
   render();
 }
 
+// 지금 다음키(K)를 누르면 실제로 입력될 문자를 미리 계산한다 — handleNext와 똑같은
+// 분기를 그대로 따라간다. 눌린 키 말풍선(showKeyBubble)에 "예상"이 아니라 실제로
+// 입력될 그 문자를 보여주기 위한 것으로, pointerdown 시점(아직 handleNext가 실행되기
+// 전)에 미리 알아야 해서 별도 함수로 뺐다. 아무것도 안 바뀌는 경우(null)엔 말풍선을
+// 아예 띄우지 않는다.
+function peekNext() {
+  if (independentActive()) {
+    if (state.lastSignKey === 'K' && state.signIndepMode) return null;
+    return 'अ';
+  }
+  if (!state.activeRoot) return null;
+  const arr = consonantGroups[state.activeRoot];
+  return arr[(state.activeCharIdx + 1) % arr.length];
+}
+
 function handleVowelKey(def) {
   const isIndep = independentActive();
   // 독립모음 모드에서는 독립모음 한 바퀴를 다 돈 다음 의존모음 한 바퀴, 다시 독립모음 순으로 순환한다
@@ -163,6 +186,17 @@ function handleVowelKey(def) {
   render();
 }
 
+// peekNext와 같은 이유로 handleVowelKey와 같은 분기를 미리 계산한다 — 지금 이
+// 모음/부호키를 누르면 실제로 입력될 문자(멀티탭 중이면 다음 순번의 문자)를 반환한다.
+function peekVowelKey(def) {
+  const isIndep = independentActive();
+  const chars = isIndep ? (def.indep ? def.indep.concat(def.chars) : def.chars) : def.chars;
+  if (state.lastSignKey === def.id && state.signIndepMode === isIndep) {
+    return chars[(state.signTapIdx + 1) % chars.length];
+  }
+  return chars[0];
+}
+
 // ● 키(스페이스와 엔터 사이): 다이렉트로 단다(।)/이중단다(॥)/줄임표(...)를 순환
 // 입력한다. 3연타부터는 점을 하나씩 계속 추가한다(상한 없음). 독립모음 모드와
 // 무관하게 항상 같은 동작이며, 다른 키를 누르면(lastSignKey가 바뀌면) 처음부터
@@ -171,6 +205,11 @@ function dandaSeq(idx) {
   if (idx === 0) return '।';
   if (idx === 1) return '॥';
   return '.'.repeat(idx + 1);
+}
+
+// peekNext/peekVowelKey와 같은 이유 — 지금 danda 키를 누르면 실제로 입력될 문자를 미리 계산한다.
+function peekDanda() {
+  return dandaSeq(state.lastSignKey === 'DANDA' ? state.signTapIdx + 1 : 0);
 }
 
 function handleDanda() {
@@ -183,6 +222,31 @@ function handleDanda() {
   } else {
     appendText(dandaSeq(0));
     state.lastSignKey = 'DANDA'; state.signTapIdx = 0; state.signIndepMode = false;
+  }
+  state.activeRoot = null; state.activeCharIdx = 0;
+  state.independentMode = false;
+  render();
+}
+
+// 하단바 느낌표 자리에 있는 쉼표/느낌표 결합키: 1타는 쉼표, 2타부터는 느낌표가
+// danda의 점처럼 계속 누적된다(,  →  !  →  !!  →  !!!  → …). 힌디/영문 모드가 공유한다.
+function commaExclSeq(idx) { return idx === 0 ? ',' : '!'.repeat(idx); }
+
+// peekDanda와 같은 이유 — 지금 이 키를 누르면 실제로 입력될 문자를 미리 계산한다.
+function peekCommaExcl() {
+  return commaExclSeq(state.lastSignKey === 'COMMA_EXCL' ? state.signTapIdx + 1 : 0);
+}
+
+function handleCommaExcl() {
+  if (state.lastSignKey === 'COMMA_EXCL') {
+    const prev = commaExclSeq(state.signTapIdx);
+    const t = getText();
+    setText(t.slice(0, -prev.length));
+    state.signTapIdx += 1;
+    appendText(commaExclSeq(state.signTapIdx));
+  } else {
+    appendText(commaExclSeq(0));
+    state.lastSignKey = 'COMMA_EXCL'; state.signTapIdx = 0; state.signIndepMode = false;
   }
   state.activeRoot = null; state.activeCharIdx = 0;
   state.independentMode = false;
@@ -239,18 +303,18 @@ function handleEnter() {
 
 // ── 숫자/기호 자판 데이터 (images/bg_numeric_keyboard.png 실측 기준, 칸마다 글자 하나씩
 // 이미 그려져 있어 멀티탭/순환 없이 그대로 한 글자만 입력한다) ──────────────
+// 1~3행은 10열 균등 그리드. 4행은 8칸 + 삭제키(부활, 우측 끝 넓은 칸)로 끝난다.
 const NUM_ROWS = [
-  ['!','@','#','₹','%','^','&','*','(',')'],
+  ['$','@','#','₹','%','^','&','*','(',')'],
   ['1','2','3','4','5','6','7','8','9','0'],
-  ['`','~','{','}','\\','|',';',':',"'",'"'],
-  ['_','+','[',']','<','>',',','.','/','?'],
+  ['<','>','[',']','{','}',';',':',"'",'"'],
 ];
+const NUM_ROW4 = ['~','-','_','=','+','\\','|','/'];
 
 function handleNumSingle(ch) { appendText(ch); render(); }
 function handleNumSpace() { appendText(' '); render(); }
 function handleNumEnter() { appendText('\n'); render(); }
 
-// 스와이프 삭제(handleSwipeDelete)가 숫자판 모드일 때 재사용한다 — 물리 키는 없다.
 function handleNumBS() {
   backspace();
   render();
@@ -275,30 +339,32 @@ function enterNumericMode() {
   render();
 }
 
-// ── 좌표 (이미지 1421×778 픽셀 실측 기준 %) ──────────────────────────────
-const KEY_COLS = [1.55, 14.00, 26.39, 38.78, 51.16, 63.62, 76.14, 88.60];
-const KEY_ROWS = [3.09, 27.89, 52.44];
-const KEY_W = 9.53, KEY_H = 19.97;
-const BOT_Y = 76.94, BOT_H = 19.84;
-// 상용구키 자리엔 느낌표/물음표 두 칸, danda 자리엔 쉼표(danda 본체는 3행8열로 이동) —
-// 하단바가 5칸(!, ?, 스페이스, 쉼표, 엔터)이 됨. images/keyboard.png 실측 기준 %.
-const BOT_SECTIONS = { excl:[1.11,11.87], quest:[13.58,24.33], space:[25.96,66.25], comma:[67.80,78.71], enter:[80.34,98.89] };
+// ── 좌표 (images/keyboard.png 1346×740 픽셀 실측 기준 %) ──────────────────
+const KEY_COLS = [0.74, 13.22, 25.56, 37.96, 50.45, 62.90, 75.33, 87.79];
+const KEY_ROWS = [2.97, 27.70, 52.30];
+const KEY_W = 11.24, KEY_H = 20.71;
+const BOT_Y = 76.49, BOT_H = 20.71;
+// 삭제키 부활(3행8열, rightKeys 마지막 항목)로 danda가 하단바 옛 쉼표 자리로,
+// 그 쉼표는 옛 느낌표(상용구) 자리로 밀려나 느낌표와 결합했다 — 하단바 5칸
+// ([,!]결합, ?, 스페이스, danda(।/॥/…), 엔터). images/keyboard.png 실측 기준 %.
+const BOT_SECTIONS = { excl:[0.74,11.96], quest:[13.22,24.44], space:[25.63,66.42], comma:[67.61,78.90], enter:[80.09,99.11] };
 
-// ── 영문(쿼티) 자판 좌표 (images/keyboard_eng.png 2176×1182 실측 기준 %) ──
-const ENG_ROW_TOP = [2.45, 27.50, 52.54];
-const ENG_ROW_H = 20.13;
-const ENG_KEY_W = 8.594;
+// ── 영문(쿼티) 자판 좌표 (images/keyboard_eng.png 1348×740 픽셀 실측 기준 %) ──
+const ENG_ROW_TOP = [2.97, 27.70, 52.16];
+const ENG_ROW_H = 20.95;
+const ENG_KEY_W = 9.15;
 const ENG_ROW1 = ['Q','W','E','R','T','Y','U','I','O','P'];
 const ENG_ROW2 = ['A','S','D','F','G','H','J','K','L'];
 const ENG_ROW3 = ['Z','X','C','V','B','N','M'];
-const ENG_ROW1_COLS = [1.06,10.94,20.86,30.76,40.67,50.55,60.48,70.36,80.29,90.17];
-const ENG_ROW2_COLS = [6.07,15.95,25.87,35.76,45.64,55.56,65.44,75.37,85.25];
-const ENG_ROW3_COLS = [15.86,25.78,35.66,45.54,55.47,65.35,75.28];
-const ENG_SHIFT = { left:1.01, width:11.90 };
-const ENG_PERIOD = { left:86.99, width:11.90 }; // 3행 마지막 칸: 백스페이스 폐지, 마침표로 대체(이미지에 이미 "." 그려져 있음)
-const ENG_BOT_Y = 77.08, ENG_BOT_H = 20.13;
-// 힌디어 모드와 동일하게 하단바 5칸(!, ?, 스페이스, 쉼표, 엔터) — images/keyboard_eng.png 실측 기준 %.
-const ENG_BOT_SECTIONS = { excl:[1.11,11.87], quest:[13.58,24.33], space:[25.96,66.17], comma:[67.80,78.64], enter:[80.27,98.81] };
+const ENG_ROW1_COLS = [0.67,10.61,20.55,30.49,40.50,50.45,60.39,70.33,80.27,90.21];
+const ENG_ROW2_COLS = [5.71,15.65,25.59,35.53,45.48,55.42,65.43,75.37,85.31];
+const ENG_ROW3_COLS = [15.58,25.52,35.46,45.40,55.34,65.28,75.30];
+const ENG_SHIFT = { left:0.67, width:12.39 };
+const ENG_DELETE = { left:86.94, width:12.02 }; // 3행 마지막 칸: 마침표 폐지, 삭제키 부활(마침표는 하단바 옛 쉼표 자리로 이동)
+const ENG_BOT_Y = 76.49, ENG_BOT_H = 20.95;
+// 힌디 모드와 동일한 재배치: 하단바 5칸([,!]결합, ?, 스페이스, 마침표, 엔터) —
+// images/keyboard_eng.png 실측 기준 %.
+const ENG_BOT_SECTIONS = { excl:[0.89,12.09], quest:[13.35,24.56], space:[25.74,66.40], comma:[67.58,78.86], enter:[80.05,99.04] };
 
 // ── 히트박스 확장: 이미지엔 키 사이 여백이 그려져 있지만, 실제 터치 영역은 그
 // 여백까지 이웃 키와 절반씩 나눠 가져서 화면 전체(0~100%)를 빈틈없이 덮게 만든다.
@@ -327,8 +393,8 @@ const HIT_BOT_SECTIONS = expandAxisHitboxes(
 const ENG_HIT_ROW1 = expandAxisHitboxes(ENG_ROW1_COLS, ENG_ROW1_COLS.map(() => ENG_KEY_W));
 const ENG_HIT_ROW2 = expandAxisHitboxes(ENG_ROW2_COLS, ENG_ROW2_COLS.map(() => ENG_KEY_W));
 const ENG_HIT_ROW3 = expandAxisHitboxes(
-  [ENG_SHIFT.left, ...ENG_ROW3_COLS, ENG_PERIOD.left],
-  [ENG_SHIFT.width, ...ENG_ROW3_COLS.map(() => ENG_KEY_W), ENG_PERIOD.width]
+  [ENG_SHIFT.left, ...ENG_ROW3_COLS, ENG_DELETE.left],
+  [ENG_SHIFT.width, ...ENG_ROW3_COLS.map(() => ENG_KEY_W), ENG_DELETE.width]
 );
 const ENG_HIT_ROWS = expandAxisHitboxes([...ENG_ROW_TOP, ENG_BOT_Y], [ENG_ROW_H, ENG_ROW_H, ENG_ROW_H, ENG_BOT_H]);
 // 순서: [0]!, [1]?, [2]스페이스, [3]쉼표, [4]엔터 (힌디 모드와 동일)
@@ -337,21 +403,28 @@ const ENG_HIT_BOT = expandAxisHitboxes(
   [ENG_BOT_SECTIONS.excl[1] - ENG_BOT_SECTIONS.excl[0], ENG_BOT_SECTIONS.quest[1] - ENG_BOT_SECTIONS.quest[0], ENG_BOT_SECTIONS.space[1] - ENG_BOT_SECTIONS.space[0], ENG_BOT_SECTIONS.comma[1] - ENG_BOT_SECTIONS.comma[0], ENG_BOT_SECTIONS.enter[1] - ENG_BOT_SECTIONS.enter[0]]
 );
 
-// ── 숫자/기호 자판 좌표 (images/bg_numeric_keyboard.png 918×620 실측 기준 %) ──
-// 1~4행은 10열 균등 그리드를 공유하고(칸마다 글자 하나씩 그려져 있어 순환 없이 단일
-// 탭으로 입력), 5행(하단바)만 폭이 다른 5칸(-, =, 스페이스, $, 엔터)이다.
-const NUM_COLS = [1.20, 11.11, 21.02, 30.94, 40.85, 50.76, 60.68, 70.59, 80.50, 90.31];
-const NUM_KEY_W = 8.60;
-const NUM_ROW_TOP = [2.74, 21.29, 41.29, 61.13, 80.81];
-const NUM_ROW_H = [14.84, 16.61, 16.61, 16.61, 16.45]; // 실측상 1행만 나머지보다 살짝 낮다
-const NUM_BOT_SECTIONS = { minus:[1.31,10.02], equals:[11.33,19.83], space:[21.13,67.65], dollar:[69.28,78.43], enter:[80.17,98.58] };
+// ── 숫자/기호 자판 좌표 (images/bg_numeric_keyboard.png 1344×906 픽셀 실측 기준 %) ──
+// 1~3행은 10열 균등 그리드(칸마다 글자 하나씩 그려져 있어 순환 없이 단일 탭으로 입력).
+// 4행은 8칸 + 삭제키(부활, 우측 끝 넓은 칸). 5행(하단바)은 폭이 다른 7칸
+// (`, !, ?, 스페이스, ',', '.', 엔터)이다.
+const NUM_COLS = [0.67, 10.64, 20.61, 30.55, 40.53, 50.47, 60.42, 70.36, 80.31, 90.23];
+const NUM_KEY_W = 9.15;
+const NUM_ROW4_COLS = NUM_COLS.slice(0, 8); // 4행: 위와 같은 8칸 + 아래 삭제키
+const NUM_DELETE = { left:81.92, width:17.19 };
+const NUM_ROW_TOP = [2.32, 21.08, 41.28, 61.37, 81.24];
+const NUM_ROW_H = [15.56, 17.22, 17.33, 17.22, 17.00];
+// 순서: [0]`, [1]!, [2]?, [3]스페이스, [4]쉼표, [5]마침표, [6]엔터
+const NUM_BOT_SECTIONS = { back:[0.74,10.04], excl:[10.71,19.94], quest:[20.61,29.76], space:[30.65,59.67], comma:[60.49,69.72], period:[70.46,79.61], enter:[80.36,99.18] };
 
 const NUM_HIT_COLS = expandAxisHitboxes(NUM_COLS, NUM_COLS.map(() => NUM_KEY_W));
+const NUM_HIT_ROW4 = expandAxisHitboxes(
+  [...NUM_ROW4_COLS, NUM_DELETE.left],
+  [...NUM_ROW4_COLS.map(() => NUM_KEY_W), NUM_DELETE.width]
+);
 const NUM_HIT_ROWS = expandAxisHitboxes(NUM_ROW_TOP, NUM_ROW_H);
-// 순서: [0]-, [1]=, [2]스페이스, [3]$, [4]엔터
 const NUM_HIT_BOT = expandAxisHitboxes(
-  [NUM_BOT_SECTIONS.minus[0], NUM_BOT_SECTIONS.equals[0], NUM_BOT_SECTIONS.space[0], NUM_BOT_SECTIONS.dollar[0], NUM_BOT_SECTIONS.enter[0]],
-  [NUM_BOT_SECTIONS.minus[1] - NUM_BOT_SECTIONS.minus[0], NUM_BOT_SECTIONS.equals[1] - NUM_BOT_SECTIONS.equals[0], NUM_BOT_SECTIONS.space[1] - NUM_BOT_SECTIONS.space[0], NUM_BOT_SECTIONS.dollar[1] - NUM_BOT_SECTIONS.dollar[0], NUM_BOT_SECTIONS.enter[1] - NUM_BOT_SECTIONS.enter[0]]
+  [NUM_BOT_SECTIONS.back[0], NUM_BOT_SECTIONS.excl[0], NUM_BOT_SECTIONS.quest[0], NUM_BOT_SECTIONS.space[0], NUM_BOT_SECTIONS.comma[0], NUM_BOT_SECTIONS.period[0], NUM_BOT_SECTIONS.enter[0]],
+  [NUM_BOT_SECTIONS.back[1] - NUM_BOT_SECTIONS.back[0], NUM_BOT_SECTIONS.excl[1] - NUM_BOT_SECTIONS.excl[0], NUM_BOT_SECTIONS.quest[1] - NUM_BOT_SECTIONS.quest[0], NUM_BOT_SECTIONS.space[1] - NUM_BOT_SECTIONS.space[0], NUM_BOT_SECTIONS.comma[1] - NUM_BOT_SECTIONS.comma[0], NUM_BOT_SECTIONS.period[1] - NUM_BOT_SECTIONS.period[0], NUM_BOT_SECTIONS.enter[1] - NUM_BOT_SECTIONS.enter[0]]
 );
 
 // 키 입력 확정을 누르는 순간(pointerdown)이 아니라 떼는 순간(pointerup)으로 미룬다.
@@ -446,7 +519,29 @@ function showLongPressHint(text) {
   longPressToastTimer = setTimeout(() => el.classList.remove('show'), 1600);
 }
 
-function makeBtn(cls, style, onClick, longPressText) {
+// 눌린 키 위에 그 키의 대표 문자(들)를 보여주는 말풍선. 실제 모바일 키보드처럼
+// 손가락이 글자를 가리게 되니 눌렀다는 걸(그리고 뭘 눌렀는지) 눈으로 바로 확인시켜준다.
+// 버튼이 여러 개 동시에 눌려도(멀티터치) 말풍선은 하나만 떠서 방금 누른 키를 따라가되,
+// 먼저 누른 손가락이 나중에 떼질 때 지금 보여주고 있는(나중에 누른) 말풍선을 잘못
+// 지우지 않도록 "누가 지금 말풍선의 주인인지"(pointerId)를 추적한다.
+let keyBubbleOwnerPointerId = null;
+function showKeyBubble(pointerId, rectStyle, text) {
+  const el = document.getElementById('key-bubble');
+  if (!el || !text) return;
+  keyBubbleOwnerPointerId = pointerId;
+  const left = parseFloat(rectStyle.left) + parseFloat(rectStyle.width) / 2;
+  el.textContent = text;
+  Object.assign(el.style, { left: left + '%', top: rectStyle.top });
+  el.classList.add('show');
+}
+function hideKeyBubble(pointerId) {
+  if (keyBubbleOwnerPointerId !== pointerId) return;
+  keyBubbleOwnerPointerId = null;
+  const el = document.getElementById('key-bubble');
+  if (el) el.classList.remove('show');
+}
+
+function makeBtn(cls, style, onClick, longPressText, bubbleText) {
   const b = document.createElement('button');
   b.className = 'kbd-btn ' + cls;
   Object.assign(b.style, style);
@@ -457,6 +552,7 @@ function makeBtn(cls, style, onClick, longPressText) {
       e.preventDefault();
       downPointerId = e.pointerId;
       downKeyPointers.set(e.pointerId, Date.now());
+      if (bubbleText) showKeyBubble(e.pointerId, style, bubbleText);
       // 아직 활성 키가 없거나(첫 손가락) 활성 키가 너무 오래 안 풀렸으면(유실 추정)
       // 이 키를 활성 키로 등록한다. 이미 다른 손가락이 활성 키를 쥐고 있으면 그건
       // 안 건드리고 그대로 둔다 — 이 키는 나중에 pointerup에서 "먼저 눌린 키"가
@@ -487,6 +583,7 @@ function makeBtn(cls, style, onClick, longPressText) {
       downKeyPointers.delete(e.pointerId);
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       pendingLongPressCancel = null;
+      hideKeyBubble(e.pointerId);
       if (kbdGestureActive) {
         // 이 키는 스와이프로 소비됐으니 입력 없음(기존 동작). 이 키가 활성 키였다면
         // 자리를 비우고 기다리던 큐를 마저 흘려보낸다.
@@ -513,6 +610,7 @@ function makeBtn(cls, style, onClick, longPressText) {
       flushPendingRenderIfIdle();
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       pendingLongPressCancel = null;
+      hideKeyBubble(e.pointerId);
     });
   }
   return b;
@@ -525,7 +623,7 @@ function makeBtn(cls, style, onClick, longPressText) {
 // 둘 다 #kbd의 같은 %좌표계를 공유하니 별도 환산 없이 그대로 쓸 수 있다.
 function makeLetterBtn(ch, hitStyle, visualStyle, onClick) {
   const frag = document.createDocumentFragment();
-  frag.appendChild(makeBtn('kbd-eng-hit', hitStyle, onClick));
+  frag.appendChild(makeBtn('kbd-eng-hit', hitStyle, onClick, null, ch));
 
   const label = document.createElement('div');
   label.className = 'kbd-label kbd-eng-letter';
@@ -613,7 +711,7 @@ function handleEngLetter(ch) {
 
 function handleEngSpace() { appendText(' '); render(); }
 
-// 스와이프 삭제(handleSwipeDelete)가 영문 모드일 때 재사용한다 — 물리 키는 폐지됐다.
+// 영문 모드 3행 마지막 칸의 삭제키 핸들러.
 function handleEngBackspace() {
   backspace();
   render();
@@ -621,7 +719,7 @@ function handleEngBackspace() {
 
 function handleEngEnter() { appendText('\n'); render(); }
 
-// 하단바의 쉼표/느낌표/물음표 + 3행 마지막 칸의 마침표 키 공용 핸들러.
+// 하단바의 물음표 + 3행 마지막 칸이던 마침표(현재는 하단바로 이동) 공용 핸들러.
 function handleEngPunct(ch) { appendText(ch); render(); }
 
 // 시프트: 더블탭=캡스락 토글(다른 폰 키보드와 동일 관례), 싱글탭=임시 대문자 1글자.
@@ -692,7 +790,7 @@ function renderEng() {
   // 히트박스)과 점을 얹는 표시용 레이어(그림 속 키 위치 그대로)를 분리해서 고친다.
   kbd.appendChild(makeBtn('kbd-eng-hit', {
     left: ENG_HIT_ROW3[0].start + '%', top: rowY[2].start + '%', width: ENG_HIT_ROW3[0].size + '%', height: rowY[2].size + '%'
-  }, handleShiftTap));
+  }, handleShiftTap, null, '⇧'));
 
   const shiftCls = 'kbd-shift' + (state.engShiftState === 'lock' ? ' locked' : state.engShiftState === 'once' ? ' once' : '');
   const shiftVisual = document.createElement('div');
@@ -706,21 +804,21 @@ function renderEng() {
   shiftVisual.appendChild(dot);
   kbd.appendChild(shiftVisual);
 
-  // 3행 마지막 칸: 백스페이스 폐지, 마침표로 대체(이미지에 라벨 이미 그려져 있음)
+  // 3행 마지막 칸: 마침표 폐지, 삭제키 부활(이미지에 아이콘 이미 그려져 있음) — 힌디
+  // 모드와 동일하게 마침표는 하단바 옛 쉼표 자리로 옮겨갔다.
   kbd.appendChild(makeBtn('kbd-func', {
     left: ENG_HIT_ROW3[8].start + '%', top: rowY[2].start + '%', width: ENG_HIT_ROW3[8].size + '%', height: rowY[2].size + '%'
-  }, () => handleEngPunct('.')));
+  }, handleEngBackspace, null, '⌫'));
 
-  // 하단바: ! | ? | space | , | 엔터 — 힌디 모드와 동일 구성. !, ?, 쉼표, "space" 라벨은
-  // 모두 이미지에 이미 그려져 있어(영문은 힌디처럼 स्वर 겸용 라벨이 필요 없다) 투명
-  // 버튼만 얹으면 된다.
+  // 하단바: [,!] | ? | space | . | 엔터 — 힌디 모드와 동일 재배치. 전부 이미지에 이미
+  // 그려져 있어(영문은 힌디처럼 स्वर 겸용 라벨이 필요 없다) 투명 버튼만 얹으면 된다.
   kbd.appendChild(makeBtn('kbd-func', {
     left: ENG_HIT_BOT[0].start + '%', top: rowY[3].start + '%', width: ENG_HIT_BOT[0].size + '%', height: rowY[3].size + '%'
-  }, () => handleEngPunct('!')));
+  }, handleCommaExcl, null, peekCommaExcl()));
 
   kbd.appendChild(makeBtn('kbd-func', {
     left: ENG_HIT_BOT[1].start + '%', top: rowY[3].start + '%', width: ENG_HIT_BOT[1].size + '%', height: rowY[3].size + '%'
-  }, () => handleEngPunct('?')));
+  }, () => handleEngPunct('?'), null, '?'));
 
   kbd.appendChild(makeBtn('kbd-space', {
     left: ENG_HIT_BOT[2].start + '%', top: rowY[3].start + '%', width: ENG_HIT_BOT[2].size + '%', height: rowY[3].size + '%'
@@ -728,7 +826,7 @@ function renderEng() {
 
   kbd.appendChild(makeBtn('kbd-func', {
     left: ENG_HIT_BOT[3].start + '%', top: rowY[3].start + '%', width: ENG_HIT_BOT[3].size + '%', height: rowY[3].size + '%'
-  }, () => handleEngPunct(',')));
+  }, () => handleEngPunct('.'), null, '.'));
 
   kbd.appendChild(makeBtn('kbd-enter', {
     left: ENG_HIT_BOT[4].start + '%', top: rowY[3].start + '%', width: ENG_HIT_BOT[4].size + '%', height: rowY[3].size + '%'
@@ -736,21 +834,10 @@ function renderEng() {
   kbd.appendChild(makeEnterLabel([ENG_BOT_SECTIONS.enter[0], ENG_BOT_SECTIONS.enter[1]], ENG_BOT_Y, ENG_BOT_H));
 }
 
-// 오른쪽 1/3 좌향(가로) 스와이프 = 삭제. 힌디/영문/숫자 어느 모드에 있든 지금 그
-// 모드의 백스페이스 키를 누른 것과 똑같이 동작하게, 각 모드의 기존 핸들러를 그대로
-// 재사용한다(state 정리 로직까지 모드별로 다르므로 backspace()만 단독으로 부르지 않음).
-function handleSwipeDelete() {
-  if (numericMode) handleNumBS();
-  else if (state.engActive) handleEngBackspace();
-  else handleBS();
-  render();
-}
-
-// ── 간편 모드 전환: 자판 영역을 좌/중/우 1/3로 나눠 각 구역의 스와이프에 서로 다른
-// 동작을 배정한다 (좌: 상용구, 중앙: 힌디↔영문 토글, 우: 세로
-// 스와이프=숫자/기호, 좌향 가로 스와이프=삭제). 세로는 방향 상관없이 일정 거리 이상
-// 이동하면 발동하는 예전 방식 그대로이고, 가로(삭제)는 우측 1/3에서만, 왼쪽으로
-// 일정 거리 이상 이동해야 발동한다.
+// ── 간편 모드 전환: 자판 영역을 좌/중/우 1/3로 나눠 각 구역의 상하 스와이프에 서로
+// 다른 동작을 배정한다 (좌: 상용구, 중앙: 힌디↔영문 토글, 우: 숫자/기호). 삭제는
+// 각 모드에 부활한 물리 키로만 한다(스와이프 삭제는 폐지). 방향 상관없이 일정 거리
+// 이상 이동하면 발동한다.
 // 이제 한 지점(포인터 1개)만 있으면 되므로 터치 전용 이벤트 대신 Pointer Events를
 // 쓴다 — 폰 터치와 PC 마우스 드래그를 같은 코드로 함께 지원하기 위함(PC에서도
 // 마우스로 클릭+드래그하면 테스트 가능).
@@ -759,6 +846,10 @@ function handleSwipeDelete() {
 // 되돌린다(좌: 상용구, 우: 숫자판, 둘 다 같은 패턴).
 (function initSwipeGesture() {
   const wrap = document.getElementById('keyboard-wrap');
+  // 오래 누르기를 하면 안드로이드/데스크톱 브라우저가 pointerdown의 preventDefault와
+  // 무관하게 "이미지 저장" 같은 contextmenu를 별도로 띄운다 — CSS의 user-select/
+  // touch-callout:none만으로는 못 막아서 이벤트 자체를 막는다.
+  wrap.addEventListener('contextmenu', (e) => e.preventDefault());
   let activePointerId = null;
   let activePointerSetAt = 0;
   let startX = null, startY = null, triggered = false, zone = null;
@@ -818,6 +909,11 @@ function handleSwipeDelete() {
     downKeyPointers.delete(e.pointerId);
     if (activeKeyPointerId === e.pointerId) { activeKeyPointerId = null; runQueuedKeyCommits(); }
     if (pendingLongPressCancel) { pendingLongPressCancel(); pendingLongPressCancel = null; }
+    // 스와이프를 시작한 손가락이 마침 어떤 키 위에서 눌렸었다면(눌림→스와이프로
+    // 이어지는 흔한 경우), 그 키의 말풍선이 스와이프 내내 화면에 얼어붙어 있었다 —
+    // 스와이프 지원 키보드들이 흔히 하듯, 제스처로 확정되는 순간 즉시 지운다(눌렀던
+    // 키를 실제로 입력하지 않을 것이므로 대표 문자를 계속 보여줄 이유가 없다).
+    hideKeyBubble(e.pointerId);
     try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
   }
 
@@ -825,17 +921,6 @@ function handleSwipeDelete() {
     if (e.pointerId !== activePointerId || startX == null || triggered) return;
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
-
-    // 오른쪽 1/3 좌향 가로 스와이프 = 삭제. 세로 판정보다 먼저 검사한다(두 축 dominance
-    // 조건은 SWIPE_V_H_RATIO>1이라 어차피 동시에 참일 수 없어 순서 자체는 결과에 영향 없음).
-    // zone 태그를 'right'가 아니라 'delete'로 넘긴다 — 세로 우측 스와이프(숫자판)와
-    // 구분해야 튜토리얼이 "지금은 삭제 스와이프 단계"임을 구별해 게이트를 걸 수 있다
-    // (실사용 중엔 zoneSwipeInterceptor가 없으면 태그와 무관하게 바로 실행되니 영향 없음).
-    if (zone === 'right' && dx < 0 && Math.abs(dx) >= SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * SWIPE_V_H_RATIO) {
-      armGesture(e);
-      runZoneAction('delete', handleSwipeDelete);
-      return;
-    }
 
     if (Math.abs(dy) < SWIPE_MIN_PX) return;
     if (Math.abs(dy) < Math.abs(dx) * SWIPE_V_H_RATIO) return;
@@ -882,29 +967,43 @@ function renderNumeric() {
   const kbd = document.getElementById('kbd');
   kbd.innerHTML = '';
 
-  // 1~4행: 10열 균등 그리드, 칸마다 글자 하나 — 전부 이미지에 이미 그려져 있어 투명
+  // 1~3행: 10열 균등 그리드, 칸마다 글자 하나 — 전부 이미지에 이미 그려져 있어 투명
   // 버튼만 얹으면 된다.
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < 3; r++) {
     const rowTop = NUM_HIT_ROWS[r].start;
     const rowH = NUM_HIT_ROWS[r].size;
     NUM_ROWS[r].forEach((ch, c) => {
       const style = { left: NUM_HIT_COLS[c].start + '%', top: rowTop + '%', width: NUM_HIT_COLS[c].size + '%', height: rowH + '%' };
-      kbd.appendChild(makeBtn('kbd-func', style, () => handleNumSingle(ch)));
+      kbd.appendChild(makeBtn('kbd-func', style, () => handleNumSingle(ch), null, ch));
     });
   }
 
-  // 5행(하단바): - | = | 스페이스 | $ | 엔터
+  // 4행: 8칸 + 삭제키(부활, 우측 끝 넓은 칸)
+  const row4Top = NUM_HIT_ROWS[3].start, row4H = NUM_HIT_ROWS[3].size;
+  NUM_ROW4.forEach((ch, c) => {
+    const style = { left: NUM_HIT_ROW4[c].start + '%', top: row4Top + '%', width: NUM_HIT_ROW4[c].size + '%', height: row4H + '%' };
+    kbd.appendChild(makeBtn('kbd-func', style, () => handleNumSingle(ch), null, ch));
+  });
+  kbd.appendChild(makeBtn('kbd-func', {
+    left: NUM_HIT_ROW4[8].start + '%', top: row4Top + '%', width: NUM_HIT_ROW4[8].size + '%', height: row4H + '%'
+  }, handleNumBS, null, '⌫'));
+
+  // 5행(하단바): ` | ! | ? | 스페이스 | , | . | 엔터
   const botRow = NUM_HIT_ROWS[4];
   kbd.appendChild(makeBtn('kbd-func', {
     left: NUM_HIT_BOT[0].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[0].size + '%', height: botRow.size + '%'
-  }, () => handleNumSingle('-')));
+  }, () => handleNumSingle('`'), null, '`'));
 
   kbd.appendChild(makeBtn('kbd-func', {
     left: NUM_HIT_BOT[1].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[1].size + '%', height: botRow.size + '%'
-  }, () => handleNumSingle('=')));
+  }, () => handleNumSingle('!'), null, '!'));
+
+  kbd.appendChild(makeBtn('kbd-func', {
+    left: NUM_HIT_BOT[2].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[2].size + '%', height: botRow.size + '%'
+  }, () => handleNumSingle('?'), null, '?'));
 
   kbd.appendChild(makeBtn('kbd-space', {
-    left: NUM_HIT_BOT[2].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[2].size + '%', height: botRow.size + '%'
+    left: NUM_HIT_BOT[3].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[3].size + '%', height: botRow.size + '%'
   }, handleNumSpace));
 
   // 스페이스바 라벨: 이미지가 공란이라(영문 모드의 "space"와 달리) 직접 그려 넣는다.
@@ -919,11 +1018,15 @@ function renderNumeric() {
   kbd.appendChild(numSpaceLabel);
 
   kbd.appendChild(makeBtn('kbd-func', {
-    left: NUM_HIT_BOT[3].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[3].size + '%', height: botRow.size + '%'
-  }, () => handleNumSingle('$')));
+    left: NUM_HIT_BOT[4].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[4].size + '%', height: botRow.size + '%'
+  }, () => handleNumSingle(','), null, ','));
+
+  kbd.appendChild(makeBtn('kbd-func', {
+    left: NUM_HIT_BOT[5].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[5].size + '%', height: botRow.size + '%'
+  }, () => handleNumSingle('.'), null, '.'));
 
   kbd.appendChild(makeBtn('kbd-enter', {
-    left: NUM_HIT_BOT[4].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[4].size + '%', height: botRow.size + '%'
+    left: NUM_HIT_BOT[6].start + '%', top: botRow.start + '%', width: NUM_HIT_BOT[6].size + '%', height: botRow.size + '%'
   }, handleNumEnter));
   kbd.appendChild(makeEnterLabel([NUM_BOT_SECTIONS.enter[0], NUM_BOT_SECTIONS.enter[1]], NUM_ROW_TOP[4], NUM_ROW_H[4]));
 }
@@ -1023,7 +1126,7 @@ function renderDevanagari() {
       const root = leftKeys[row][col];
       kbd.appendChild(makeBtn('kbd-cons', {
         left: HIT_COLS[col].start + '%', top: HIT_ROWS[row].start + '%', width: HIT_COLS[col].size + '%', height: HIT_ROWS[row].size + '%'
-      }, () => handleConsonant(root), LONGPRESS_HINT_CONSONANT));
+      }, () => handleConsonant(root), LONGPRESS_HINT_CONSONANT, root));
     }
 
     for (let col = 0; col < 3; col++) {
@@ -1038,7 +1141,7 @@ function renderDevanagari() {
         else if (state.activeRoot) { labels = consonantGroups[state.activeRoot].slice(1); extraCls += ' next-active'; }
         else { labels = ['अ']; extraCls += ' next-idle'; } // 자음도 안 친 초기 상태: 같은 अ를 회색 힌트로만 미리 보여줌
         if (labels.length) extraCls += ' count-' + labels.length;
-        const b = makeBtn('kbd-label' + extraCls, style, handleNext);
+        const b = makeBtn('kbd-label' + extraCls, style, handleNext, null, peekNext());
         labels.forEach(ch => {
           const sp = document.createElement('span');
           sp.className = 'label-item'; sp.textContent = ch;
@@ -1046,24 +1149,14 @@ function renderDevanagari() {
         });
         kbd.appendChild(b);
 
-      } else if (rk.type === 'danda') {
-        // danda(।/॥/...) 키: 이미지가 공란이라 라벨을 직접 그린다. 다음키(K)와 같은
-        // 원칙으로 "방금 입력된 것"이 아니라 "다음 탭에서 입력될 것"을 미리 보여준다 —
-        // 기본(안 누른 상태)은 다음 탭이 ।이므로 ।, 한 번 누른 뒤에는 다음 탭이 ॥이므로
-        // ॥, 두 번 누른 뒤에는 다음 탭이 세 점(...)째로 들어가므로 …, 세 번 이상
-        // 누른 뒤에는 계속 점만 하나씩 늘어나므로 점(.) 하나로 고정 표시한다.
-        const dandaNextIdx = state.lastSignKey === 'DANDA' ? state.signTapIdx + 1 : 0;
-        const dandaCh = dandaNextIdx === 0 ? '।' : dandaNextIdx === 1 ? '॥' : dandaNextIdx === 2 ? '…' : '.';
-        const b = makeBtn('kbd-label count-1', style, handleDanda);
-        const sp = document.createElement('span');
-        sp.className = 'label-item'; sp.textContent = dandaCh;
-        b.appendChild(sp);
-        kbd.appendChild(b);
+      } else if (rk.type === 'bs') {
+        // 삭제키 부활 — 이미지에 이미 아이콘이 그려져 있어 투명 버튼만 얹으면 된다.
+        kbd.appendChild(makeBtn('kbd-func', style, handleBS, null, '⌫'));
 
       } else if (rk.type === 'sign') {
         const chars = isIndep ? (rk.indep || rk.chars) : rk.chars;
         const cls = 'kbd-label count-' + chars.length + (isIndep && rk.indep ? ' independent' : '');
-        const b = makeBtn(cls, style, () => handleVowelKey(rk), LONGPRESS_HINT_SIGN);
+        const b = makeBtn(cls, style, () => handleVowelKey(rk), LONGPRESS_HINT_SIGN, peekVowelKey(rk));
         chars.forEach(ch => {
           const sp = document.createElement('span');
           sp.className = 'label-item'; sp.textContent = ch;
@@ -1074,16 +1167,16 @@ function renderDevanagari() {
     }
   }
 
-  // 하단바: ! | ? | 스페이스/스와 | , | 엔터 — !, ?, 쉼표는 이미지에 이미 라벨이
-  // 그려져 있어 투명 버튼(kbd-func)만 얹으면 된다.
+  // 하단바: [,!] | ? | 스페이스/스와 | danda(।/॥/…) | 엔터 — 전부 이미지에 이미
+  // 라벨이 그려져 있어 투명 버튼(kbd-func)만 얹으면 된다.
   const botRow = HIT_ROWS[3];
   kbd.appendChild(makeBtn('kbd-func', {
     left: HIT_BOT_SECTIONS[0].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[0].size + '%', height: botRow.size + '%'
-  }, () => handlePunct('!')));
+  }, handleCommaExcl, null, peekCommaExcl()));
 
   kbd.appendChild(makeBtn('kbd-func', {
     left: HIT_BOT_SECTIONS[1].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[1].size + '%', height: botRow.size + '%'
-  }, () => handlePunct('?')));
+  }, () => handlePunct('?'), null, '?'));
 
   kbd.appendChild(makeBtn('kbd-space', {
     left: HIT_BOT_SECTIONS[2].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[2].size + '%', height: botRow.size + '%'
@@ -1101,9 +1194,11 @@ function renderDevanagari() {
   spaceLabel.appendChild(spWord); spaceLabel.appendChild(slash); spaceLabel.appendChild(svWord);
   kbd.appendChild(spaceLabel);
 
+  // danda(।/॥/…): 옛 삭제키 자리에서 이 자리로 이동했지만 순환 입력 규칙은 그대로다
+  // (handleDanda 재사용). 이미지에 이미 "।"가 그려져 있어 투명 버튼만 얹는다.
   kbd.appendChild(makeBtn('kbd-func', {
     left: HIT_BOT_SECTIONS[3].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[3].size + '%', height: botRow.size + '%'
-  }, () => handlePunct(',')));
+  }, handleDanda, null, peekDanda()));
 
   kbd.appendChild(makeBtn('kbd-enter', {
     left: HIT_BOT_SECTIONS[4].start + '%', top: botRow.start + '%', width: HIT_BOT_SECTIONS[4].size + '%', height: botRow.size + '%'

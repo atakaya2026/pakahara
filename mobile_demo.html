@@ -29,13 +29,14 @@
   <div id="tutorial-progress">
     <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
   </div>
-  <div id="tutorial-demo-box"><span id="tutorial-demo-text"></span><span class="cursor">|</span></div>
+  <div id="tutorial-demo-box"><span id="tutorial-demo-text"></span><span class="cursor">▏</span></div>
   <button id="tutorial-back-btn" aria-label="Back"></button>
   <div id="tutorial-banner"><div id="tutorial-text"></div></div>
 </div>
 <div id="keyboard-wrap">
   <img id="kbd-image" src="images/keyboard.png" alt="keyboard" draggable="false" />
   <div id="kbd"></div>
+  <div id="key-bubble"></div>
   <div id="longpress-toast"></div>
   <div id="fav-overlay">
     <img id="fav-image" src="images/fav.png" alt="favorites" draggable="false" />
@@ -96,7 +97,10 @@ function restoreResumeState() {
 if (!restoreResumeState()) {
   setText('');
   render();
-  startTutorial(); // 데모를 새로 열었을 때만 첫 실행 튜토리얼을 보여준다
+  // 튜토리얼은 당분간 생략한다 — 삭제 스와이프가 폐지되면서 기존 튜토리얼의 삭제
+  // 단계가 더 이상 끝까지 진행되지 않는다. 튜토리얼 리뉴얼 전까지는 첫 실행에도
+  // 바로 자판을 그대로 쓰게 한다. 리뉴얼되면 이 줄만 되살리면 된다.
+  // startTutorial();
 }
 </script>
 </body>

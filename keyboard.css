@@ -32,6 +32,10 @@ html, body {
 .cursor { color: #4caf80; animation: blink 1s step-end infinite; font-weight: 100; }
 @keyframes blink { from, to { opacity: 0; } 50% { opacity: 1; } }
 
+/* 아직 확정되지 않은 맨 끝 공란 자리 표시자 — 실제 공백 대신 회색 점을 깜빡여
+   "여기 독립 모음이 들어올 수도 있다"는 미확정 상태를 알린다. */
+.pending-space-dot { color: #9a9488; animation: blink 1s step-end infinite; }
+
 #keyboard-wrap {
   position: relative;
   width: 100%;
@@ -40,9 +44,34 @@ html, body {
   background: #b5b0a8;
   touch-action: none; /* 브라우저 기본 핀치줌/패닝을 막고 제스처를 JS가 전담 처리 */
   cursor: ns-resize; /* PC에서 마우스로도 상하 스와이프(드래그)가 가능함을 알림 */
+  /* 오래 누르기(길게 터치)를 해도 이미지 저장/복사 콜아웃이나 텍스트 선택이 절대
+     뜨지 않도록 이 영역 전체를 막는다 — contextmenu 자체는 keyboard.js가 막는다. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
-#kbd-image { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+#kbd-image { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
 #kbd { position: absolute; top: 0; left: 0; right: 0; bottom: 0; touch-action: none; }
+
+/* 눌린 키 위에 뜨는 말풍선: 그 키의 대표 문자(들)를 손가락에 가리지 않게 보여준다. */
+#key-bubble {
+  position: absolute; z-index: 32; left: 0; top: 0;
+  pointer-events: none;
+  background: #faf7f2; color: #1a1208;
+  border-radius: 10px; padding: 3% 5%;
+  font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 700;
+  font-size: clamp(15px, 5.6vw, 24px);
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  opacity: 0; transform: translate(-50%, calc(-100% - 8px)) scale(0.85);
+  transition: opacity 0.08s ease, transform 0.08s ease;
+}
+#key-bubble.show { opacity: 1; transform: translate(-50%, calc(-100% - 8px)) scale(1); }
+#key-bubble::after {
+  content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-top: 7px solid #faf7f2;
+}
 
 .kbd-btn {
   position: absolute;
