@@ -80,6 +80,20 @@
   #board-text .dv { color: #b4550c; font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 900; font-size: 1.2em; }
   #board-text .hl { color: #d9720f; font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 900; font-size: 1.2em; }
 
+  /* 시작 화면 안내: 두더지 게임을 안 하고 왔을 수도 있는 사람을 위한 보조 안내 + 링크 */
+  .intro-note {
+    margin-top: 0.6em;
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    font-size: clamp(12px, 1.5vw, 16px);
+    font-weight: 600; color: #6b7280; line-height: 1.5;
+  }
+  .intro-link {
+    pointer-events: auto;
+    color: #2563eb; font-weight: 800; text-decoration: underline;
+    cursor: pointer;
+  }
+  .intro-link:hover { color: #1d4ed8; }
+
   #board-sub {
     left: 27%; top: 34%; width: 65.5%; height: 5%;
     font-size: clamp(13px, 1.7vw, 18px); font-weight: 800; color: #16a34a;
@@ -586,7 +600,9 @@ let started = false;
 function renderIntro() {
   boardTextEl.innerHTML =
     '<div class="intro-title">Pakahara Tutorial 1.0</div>' +
-    '<div class="intro-sub">प्रारंभ करने के लिए स्पेसबार दबाएं।</div>';
+    '<div class="intro-sub">प्रारंभ करने के लिए स्पेसबार दबाएं।</div>' +
+    '<div class="intro-note">यदि आपने \'मोल गेम\' नहीं खेला है, तो इसे दोहराना मुश्किल हो सकता है। ' +
+    '<a href="mole.html" class="intro-link">\'मोल गेम\' खेलने जाएँ</a></div>';
   setSubText('');
   startNextWait();
 }
