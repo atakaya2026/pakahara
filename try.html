@@ -67,8 +67,9 @@
       border-radius: 999px;
       color: #fff;
     }
-    .step-badge.green { background: #4a9e28; }
-    .step-badge.blue  { background: #2a52a0; }
+    .step-badge.green  { background: #4a9e28; }
+    .step-badge.orange { background: #c9760f; }
+    .step-badge.blue   { background: #2a52a0; }
 
     .step-badge .step-num {
       background: rgba(255,255,255,0.3);
@@ -99,8 +100,22 @@
     .btn img {
       height: 36px;
     }
+    .btn-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1.25;
+    }
+    .btn-sub {
+      font-size: 0.9em;
+      font-weight: 500;
+      white-space: nowrap;
+    }
     .btn-green {
       background: #6cbc43;
+    }
+    .btn-orange {
+      background: #e2932e;
     }
     .btn-blue {
       background: #3f6fb8;
@@ -146,18 +161,32 @@
       </div>
       <button class="btn btn-green" onclick="location.href='mole.html'">
         <img src="img/icon_mole.png" alt="두더지 게임 아이콘">
-        पहले मोल गेम खेलें
+        <span class="btn-label">
+          <span class="btn-main">मोल गेम</span>
+          <span class="btn-sub">(उँगली का अभ्यास)</span>
+        </span>
       </button>
     </div>
 
-    <!-- 2단계: hatabang 체험 -->
+    <!-- 2단계: 튜토리얼 -->
+    <div class="btn-wrapper">
+      <div class="step-badge orange">
+        Step 2
+      </div>
+      <button class="btn btn-orange" onclick="location.href='tutorial.html'">
+        <img src="images/ka.png" alt="튜토리얼 아이콘">
+        पाकाहारा सीखें
+      </button>
+    </div>
+
+    <!-- 3단계: hatabang 체험 -->
     <div class="btn-wrapper">
       <div class="step-badge blue">
-        Step 2
+        Step 3
       </div>
       <button class="btn btn-blue" onclick="location.href='pc_demo_windows.html'">
         <img src="img/icon_keyboard.png" alt="키보드 아이콘">
-        पीसी पाकाहारा
+        अभी आज़माएं
       </button>
     </div>
 </div>

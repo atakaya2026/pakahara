@@ -60,7 +60,7 @@ let activeFieldIndex = null;
 
 function fieldHtml(text, isActive) {
   const esc = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return esc + (isActive ? '<span class="cursor">|</span>' : '');
+  return esc + (isActive ? '<span class="cursor">▏</span>' : '');
 }
 
 function renderFields() {

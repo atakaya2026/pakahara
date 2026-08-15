@@ -97,10 +97,7 @@ function restoreResumeState() {
 if (!restoreResumeState()) {
   setText('');
   render();
-  // 튜토리얼은 당분간 생략한다 — 삭제 스와이프가 폐지되면서 기존 튜토리얼의 삭제
-  // 단계가 더 이상 끝까지 진행되지 않는다. 튜토리얼 리뉴얼 전까지는 첫 실행에도
-  // 바로 자판을 그대로 쓰게 한다. 리뉴얼되면 이 줄만 되살리면 된다.
-  // startTutorial();
+  startTutorial();
 }
 </script>
 </body>

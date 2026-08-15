@@ -1,9 +1,10 @@
 // ── 첫 실행 튜토리얼 ────────────────────────────────────────────────────
-// 1단계: 좌/중/우 1/3 스와이프 + 삭제(우측 좌향 가로 스와이프)로 모드 전환/삭제하는
-// 법을 몸으로 익힌다.
+// 1단계: 좌/중/우 1/3 스와이프로 모드 전환하는 법을 몸으로 익힌다.
 // 2단계: 자음(क→ख) + 모음 멀티탭(ी)을 실제로 조합해본다.
+// 3단계: 스페이스로 독립모음 모드에 진입해 'आ'를 입력해본다.
+// 4단계: 할란트(हलंत)로 자음을 결합해 'क्प'를 입력해본다.
 // keyboard.js와 같은 전역 스코프를 공유하므로(둘 다 모듈이 아닌 일반 <script>),
-// state/HIT_COLS/HIT_ROWS/consonantGroups/render() 등을
+// state/HIT_COLS/HIT_ROWS/HIT_BOT_SECTIONS/consonantGroups/render() 등을
 // 그대로 참조한다.
 
 const TUT = {
@@ -14,17 +15,17 @@ const TUT = {
   typeKha:      "अब 'ख' टाइप करें।",
   typeKhi:      "अब 'ख' के बाद 'ी' टाइप करें।",
   tapAgain:     'एक बार और दबाएं।',
-  deleteSwipe:  'दाएं से बायां स्वाइप: मिटाएं',
-  outro:        'बहुत-बहुत धन्यवाद! अब पाकाहारा का उपयोग शुरू करें।',
+  indepIntro:   "स्वतंत्र स्वर के लिए, पहले स्पेस दबाने पर स्वर कुंजियाँ स्वतंत्र स्वर मोड में बदल जाती हैं। अब 'आ' टाइप करके देखें।",
+  halantIntro:  "शाबाश! अब 'हलंत' का उपयोग करके 'क्प' टाइप करें।",
+  outro:        'बहुत बढ़िया! अब कोई भी कुंजी दबाकर पाकाहारा का उपयोग शुरू करें।',
 };
 
 // 스와이프 존 단계에서 각 단계가 기다리는 존. 여기 없는 단계(조합 단계 등)에서는
-// 어떤 스와이프가 와도 막고 흔들기만 한다. 'delete'는 세로 우측 스와이프(숫자판)와
-// 구분하기 위해 keyboard.js가 삭제 스와이프에만 붙이는 전용 태그다. 상용구(left)는
-// 이번 무료 런칭 버전에서 잠가둬서(keyboard.js의 FAVORITES_ENABLED) 튜토리얼에서도 뺐다.
+// 어떤 스와이프가 와도 막고 흔들기만 한다. 상용구(left)는 이번 무료 런칭 버전에서
+// 잠가둬서(keyboard.js의 FAVORITES_ENABLED) 튜토리얼에서도 뺐다.
 const ZONE_STEP_TARGET = {
   'center-1': 'center', 'center-2': 'center',
-  'right-1': 'right', 'delete-1': 'delete',
+  'right-1': 'right',
 };
 const ZONE_RECT = {
   left:   { left: '0%',      width: '33.333%' },
@@ -34,11 +35,31 @@ const ZONE_RECT = {
 
 let tutorialActive = false;
 // 'center-1' | 'center-2' | 'right-1' |
-// 'kha-cons' | 'kha-next' | 'khi-1' | 'khi-2' | 'delete-1' | 'outro'
+// 'kha-cons' | 'kha-next' | 'khi-1' | 'khi-2' |
+// 'indep-space' | 'indep-vowel' |
+// 'halant-k' | 'halant-virama' | 'halant-p' | 'outro'
 let tutorialStep = null;
 const els = {};
 
 function q(id) { return document.getElementById(id); }
+
+// 안내 문구를 한 글자씩 타자치듯 채워 넣는다. 단계가 빠르게 넘어가서 이전 문구가 아직
+// 타이핑 중일 때 새 문구가 시작되면, 이전 타이머가 뒤늦게 이어 타이핑하지 않도록 항상
+// 먼저 끊고 새로 시작한다.
+const TYPE_DELAY_MS = 40;
+let typeTimer = null;
+
+function typeInto(el, text, onDone) {
+  clearTimeout(typeTimer);
+  el.textContent = '';
+  let i = 0;
+  (function step() {
+    i++;
+    el.textContent = text.slice(0, i);
+    if (i < text.length) typeTimer = setTimeout(step, TYPE_DELAY_MS);
+    else if (onDone) onDone();
+  })();
+}
 
 function initTutorialDom() {
   els.actionBar = q('action-bar');
@@ -73,6 +94,7 @@ function startTutorial() {
 // 뒤로가기 버튼: 지금까지의 진행을 버리고 튜토리얼을 맨 처음(환영 카드)부터 다시 시작한다.
 function restartTutorial() {
   clearThumbTimers();
+  clearTimeout(typeTimer);
   if (keyArrowTimer) clearTimeout(keyArrowTimer);
   onTutorialRender = null;
   tutorialStep = null;
@@ -82,7 +104,7 @@ function restartTutorial() {
   els.demoText.textContent = '';
   els.banner.classList.remove('shake');
   setProgress(0);
-  els.introText.textContent = TUT.welcome;
+  typeInto(els.introText, TUT.welcome);
   els.introOverlay.classList.add('show');
 }
 
@@ -98,8 +120,10 @@ function setProgress(n) {
 }
 
 // 문구가 뜨자마자 엄지/화살표가 같이 나오면 아직 문구도 다 못 읽었는데 리듬이 어색해서,
-// 문구를 먼저 보여주고 한 박자 쉬었다가 엄지 스와이프나 키 화살표를 보여준다.
-const READ_DELAY_MS = 2000;
+// 문구 타자 효과가 다 끝난 뒤 한 박자 쉬었다가 엄지 스와이프나 키 화살표를 보여준다
+// (문구 길이에 따라 타이핑 시간이 다르므로, 호출 시점이 아니라 typeInto의 onDone에서
+// 이 지연을 건다).
+const READ_DELAY_MS = 800;
 let thumbTimer = null;
 
 // 예약해둔 자동 시범 재생(thumbTimer)을 취소한다. 유저가 이미 실제로 스와이프해서
@@ -110,50 +134,25 @@ function clearThumbTimers() {
   if (thumbTimer) { clearTimeout(thumbTimer); thumbTimer = null; }
 }
 
-// 지금 단계에서 "다시 보여줘야 할" 애니메이션 함수 — 오답 피드백/자동재생이 공용으로
-// 쓴다. 세로 스와이프 단계면 playThumb, 삭제(가로) 단계면 playThumbHorizontal.
+// 지금 단계에서 "다시 보여줘야 할" 애니메이션 함수 — 오답 피드백/자동재생이 공용으로 쓴다.
 let currentReplayFn = () => {};
 
 function showZoneStep(zone, text) {
-  els.text.textContent = text;
   els.keyArrow.classList.add('hidden');
   Object.assign(els.zoneArrow.style, ZONE_RECT[zone]);
   els.zoneArrow.classList.remove('hidden');
   // 왼쪽 스와이프만 왼손 엄지 그림으로 보여준다(나머지는 오른손)
   const isLeft = zone === 'left';
   els.thumbImg.src = isLeft ? 'images/l-thumb.png' : 'images/r-thumb.png';
-  els.thumbWrap.classList.remove('shift-h'); // 삭제 단계에서 넘어온 경우 잔여 클래스 정리
   els.thumbWrap.classList.toggle('shift-left', isLeft);
   els.thumbWrap.classList.toggle('shift-right', !isLeft);
   els.thumbWrap.classList.remove('play');
-  els.swipeBgArrow.src = 'images/swipe.png'; // 삭제 단계에서 넘어온 경우 가로 화살표 잔여 정리
-  els.swipeBgArrow.classList.remove('horiz', 'play');
+  els.swipeBgArrow.classList.remove('play');
   currentReplayFn = playThumb;
   clearThumbTimers();
-  thumbTimer = setTimeout(currentReplayFn, READ_DELAY_MS);
-}
-
-// 삭제 스와이프(우측 좌향 가로) 데모 단계 전용 셋업 — 세로 스와이프 단계들과 존/애니메이션
-// 방향이 달라서 showZoneStep과 분리했다.
-function showDeleteStep() {
-  // 직전(khi-1/khi-2) 단계에서 걸어둔 키 화살표 예약을 취소한다 — 안 그러면 조합
-  // 단계에서 쓰던 "모음키 누르라는" 화살표가 여기 hidden 처리 후에도 뒤늦게 다시
-  // 나타난다(positionKeyArrow의 setTimeout이 아직 살아있어서).
-  if (keyArrowTimer) { clearTimeout(keyArrowTimer); keyArrowTimer = null; }
-  els.text.textContent = TUT.deleteSwipe;
-  els.demoText.textContent = getText();
-  els.keyArrow.classList.add('hidden');
-  Object.assign(els.zoneArrow.style, ZONE_RECT.right);
-  els.zoneArrow.classList.remove('hidden');
-  els.thumbImg.src = 'images/r-thumb.png';
-  els.thumbWrap.classList.remove('shift-left', 'shift-right', 'play');
-  els.thumbWrap.classList.add('shift-h');
-  els.swipeBgArrow.src = 'images/leftswipe.png'; // 좌향 전용 배경 화살표(swipe.png의 가로 버전)
-  els.swipeBgArrow.classList.add('horiz');
-  els.swipeBgArrow.classList.remove('play');
-  currentReplayFn = playThumbHorizontal;
-  clearThumbTimers();
-  thumbTimer = setTimeout(currentReplayFn, READ_DELAY_MS);
+  typeInto(els.text, text, () => {
+    thumbTimer = setTimeout(currentReplayFn, READ_DELAY_MS);
+  });
 }
 
 // 엄지 스와이프 애니메이션을 한 번만 재생한다(반복 재생 X). 같은 단계에서 다시
@@ -163,17 +162,6 @@ function showDeleteStep() {
 function playThumb() {
   els.thumbWrap.classList.remove('play');
   void els.thumbWrap.offsetWidth; // 리플로우를 강제해 애니메이션을 처음부터 다시 재생시킨다
-  els.thumbWrap.classList.add('play');
-
-  els.swipeBgArrow.classList.remove('play');
-  void els.swipeBgArrow.offsetWidth;
-  els.swipeBgArrow.classList.add('play');
-}
-
-// 가로(삭제) 버전 — leftswipe.png 배경 화살표와 함께 엄지가 오른쪽에서 왼쪽으로 훑는다.
-function playThumbHorizontal() {
-  els.thumbWrap.classList.remove('play');
-  void els.thumbWrap.offsetWidth;
   els.thumbWrap.classList.add('play');
 
   els.swipeBgArrow.classList.remove('play');
@@ -220,14 +208,6 @@ function advanceZoneStep() {
     // beginComposeSteps()의 resetAll()이 곧바로 힌디로 돌려버리므로, 지연 없이 바로
     // 부르면 확인할 새도 없이 사라져버린다.
     setTimeout(beginComposeSteps, 1800);
-
-  } else if (tutorialStep === 'delete-1') {
-    // 진행 점은 이미지(tutorial.png)에 5개가 이미 그려져 있는데(#tutorial-progress의
-    // CSS 주석 참고) 대문자·상용구를 뺀 지금은 실제 스와이프 마일스톤이 3개(토글/숫자/
-    // 삭제)뿐이다. 이미지를 다시 그리지 않고도 점이 끝까지 안 채워진 채로 남는 걸
-    // 피하려고, 마지막 단계(삭제)에서 남은 점을 한꺼번에 채운다.
-    setProgress(5);
-    finishTutorial();
   }
 }
 
@@ -237,8 +217,8 @@ function beginComposeSteps() {
   els.zoneArrow.classList.add('hidden');
   resetAll(); // 빈 힌디 화면으로 되돌려서 조합 단계를 깨끗하게 시작
   tutorialStep = 'kha-cons';
-  els.text.textContent = TUT.typeKha;
   positionKeyArrow(1, 1); // क (leftKeys 1행 1열)
+  typeInto(els.text, TUT.typeKha, revealKeyArrow);
   els.demoText.textContent = '';
   onTutorialRender = checkComposeProgress;
 }
@@ -246,13 +226,30 @@ function beginComposeSteps() {
 // 스와이프 엄지와 같은 리듬: 문구가 먼저 보이고, 한 박자 쉬었다가 화살표가 나타난다.
 let keyArrowTimer = null;
 
-function positionKeyArrow(row, col) {
-  const c = HIT_COLS[col], r = HIT_ROWS[row];
+// 새 단계로 넘어갈 때 즉시 호출해서, 지난 단계의(엉뚱한 위치를 가리키던) 화살표를
+// 바로 숨기고 다음 목표 위치로 옮겨 둔다. 실제로 다시 보이는 시점은 revealKeyArrow가
+// 따로 정한다 — 안내 문구 타자 효과가 끝난 뒤에 불러야 화살표가 문구보다 먼저
+// 튀어나오지 않는다.
+function setKeyArrowRect(c, r) {
   Object.assign(els.keyArrow.style, {
     left: c.start + '%', width: c.size + '%',
     top: (r.start - 9) + '%', height: '9%',
   });
   els.keyArrow.classList.add('hidden');
+  if (keyArrowTimer) clearTimeout(keyArrowTimer);
+}
+
+function positionKeyArrow(row, col) {
+  setKeyArrowRect(HIT_COLS[col], HIT_ROWS[row]);
+}
+
+// 스페이스바처럼 메인 3행이 아니라 하단바에 있는 키를 가리킬 때 쓴다.
+// idx는 HIT_BOT_SECTIONS 순서(0=[,!], 1=?, 2=스페이스, 3=danda, 4=엔터)를 그대로 따른다.
+function positionKeyArrowBotSection(idx) {
+  setKeyArrowRect(HIT_BOT_SECTIONS[idx], HIT_ROWS[3]);
+}
+
+function revealKeyArrow() {
   if (keyArrowTimer) clearTimeout(keyArrowTimer);
   keyArrowTimer = setTimeout(() => els.keyArrow.classList.remove('hidden'), READ_DELAY_MS);
 }
@@ -263,6 +260,7 @@ function checkComposeProgress() {
     if (state.activeRoot === 'क' && state.activeCharIdx === 0) {
       tutorialStep = 'kha-next';
       positionKeyArrow(1, 6); // 다음키(K, rightKeys 1행 1열 → 이미지 6열)
+      revealKeyArrow(); // 문구는 그대로라 타자 효과가 없으니 곧장 예약한다
     } else if (state.activeRoot || state.lastSignKey) {
       shakeBanner();
     }
@@ -270,47 +268,120 @@ function checkComposeProgress() {
   } else if (tutorialStep === 'kha-next') {
     if (state.activeRoot === 'क' && state.activeCharIdx === 1) {
       tutorialStep = 'khi-1';
-      els.text.textContent = TUT.typeKhi;
       positionKeyArrow(1, 7); // L키(모음, rightKeys 1행 2열 → 이미지 7열)
+      typeInto(els.text, TUT.typeKhi, revealKeyArrow);
     } else if (state.activeRoot !== 'क' || state.lastSignKey) {
       shakeBanner();
       tutorialStep = 'kha-cons';
-      els.text.textContent = TUT.typeKha;
       positionKeyArrow(1, 1);
+      typeInto(els.text, TUT.typeKha, revealKeyArrow);
     }
 
   } else if (tutorialStep === 'khi-1') {
     if (state.lastSignKey === 'L' && state.signTapIdx === 0) {
       tutorialStep = 'khi-2';
-      els.text.textContent = TUT.tapAgain;
+      typeInto(els.text, TUT.tapAgain);
     } else if ((state.lastSignKey && state.lastSignKey !== 'L') || state.activeRoot) {
       shakeBanner();
     }
 
   } else if (tutorialStep === 'khi-2') {
     if (state.lastSignKey === 'L' && state.signTapIdx === 1) {
-      tutorialStep = 'delete-1';
-      showDeleteStep(); // ख + ी가 완성된 상태(खी) 그대로 이어서 삭제 스와이프를 가르친다
+      setProgress(3);
+      beginIndependentStep();
     } else if ((state.lastSignKey && state.lastSignKey !== 'L') || state.activeRoot) {
       shakeBanner();
       tutorialStep = 'khi-1';
-      els.text.textContent = TUT.typeKhi;
+      typeInto(els.text, TUT.typeKhi);
+    }
+
+  } else if (tutorialStep === 'indep-space') {
+    if (getText().endsWith(' ')) {
+      tutorialStep = 'indep-vowel';
+      positionKeyArrow(1, 7); // L키(모음, rightKeys 1행 2열 → 이미지 7열)
+      revealKeyArrow(); // 문구는 그대로라 타자 효과가 없으니 곧장 예약한다
+    } else if (state.activeRoot || state.lastSignKey) {
+      shakeBanner();
+    }
+
+  } else if (tutorialStep === 'indep-vowel') {
+    if (state.lastSignKey === 'L' && state.signIndepMode && state.signTapIdx === 0) {
+      setProgress(4);
+      beginHalantStep();
+    } else if ((state.lastSignKey && !(state.lastSignKey === 'L' && state.signIndepMode)) || state.activeRoot) {
+      shakeBanner();
+      tutorialStep = 'indep-space';
+      positionKeyArrowBotSection(2); // 스페이스바
+      revealKeyArrow();
+    }
+
+  } else if (tutorialStep === 'halant-k') {
+    if (state.activeRoot === 'क' && state.activeCharIdx === 0) {
+      tutorialStep = 'halant-virama';
+      positionKeyArrow(2, 5); // N키(할란트, rightKeys 3행 1열 → 이미지 5열)
+      revealKeyArrow();
+    } else if (state.activeRoot || state.lastSignKey) {
+      shakeBanner();
+    }
+
+  } else if (tutorialStep === 'halant-virama') {
+    if (state.lastSignKey === 'N' && state.signTapIdx === 0) {
+      tutorialStep = 'halant-p';
+      positionKeyArrow(1, 0); // प (leftKeys 1행 0열)
+      revealKeyArrow();
+    } else if ((state.lastSignKey && state.lastSignKey !== 'N') || state.activeRoot) {
+      shakeBanner();
+    }
+
+  } else if (tutorialStep === 'halant-p') {
+    if (state.activeRoot === 'प' && state.activeCharIdx === 0) {
+      setProgress(5);
+      finishTutorial();
+    } else if ((state.activeRoot && state.activeRoot !== 'प') || state.lastSignKey) {
+      shakeBanner();
     }
   }
-  // 'delete-1' 단계는 여기서 별도로 할 일이 없다 — 위 els.demoText 갱신이면 충분하고,
-  // 실제 진행 판정은 스와이프 존 게이트(handleZoneSwipe → advanceZoneStep)가 맡는다.
+}
+
+// ── 3단계: 독립모음(आ) ─────────────────────────────────────────────────
+function beginIndependentStep() {
+  clearThumbTimers();
+  els.zoneArrow.classList.add('hidden');
+  tutorialStep = 'indep-space';
+  resetAll(); // 빈 힌디 화면으로 되돌려서 독립모음 단계를 깨끗하게 시작
+  positionKeyArrowBotSection(2); // 스페이스바
+  typeInto(els.text, TUT.indepIntro, revealKeyArrow);
+  els.demoText.textContent = '';
+}
+
+// ── 4단계: 할란트(हलंत) + क्प ────────────────────────────────────────────
+function beginHalantStep() {
+  clearThumbTimers();
+  els.zoneArrow.classList.add('hidden');
+  tutorialStep = 'halant-k';
+  resetAll(); // 빈 힌디 화면으로 되돌려서 할란트 단계를 깨끗하게 시작
+  positionKeyArrow(1, 1); // क (leftKeys 1행 1열)
+  typeInto(els.text, TUT.halantIntro, revealKeyArrow);
+  els.demoText.textContent = '';
 }
 
 function finishTutorial() {
-  onTutorialRender = null;
   tutorialStep = 'outro';
   if (keyArrowTimer) clearTimeout(keyArrowTimer);
   els.keyArrow.classList.add('hidden');
-  els.text.textContent = TUT.outro;
-  setTimeout(() => {
-    els.topbar.classList.remove('show');
-    els.actionBar.classList.remove('tutorial-hidden');
-    tutorialActive = false;
-    resetAll();
-  }, 2600);
+  typeInto(els.text, TUT.outro);
+  // 정해진 시간이 아니라 유저가 "아무 키나" 누를 때까지 기다린다 — 예전엔 타이머로
+  // 일정 시간 뒤 강제로 닫아서, 멘트가 길면 다 읽기도 전에 사라지는 문제가 있었다.
+  // onTutorialRender는 실제 키를 눌러 render()가 도는 순간마다 불리므로, 다음 입력
+  // 한 번이 그대로 "이제 끝" 신호가 된다.
+  onTutorialRender = endTutorial;
+}
+
+// finishTutorial() 이후 첫 입력에서 튜토리얼을 실제로 접고 평소 자판으로 돌려보낸다.
+function endTutorial() {
+  onTutorialRender = null; // resetAll()이 곧 다시 걸 render()가 이 훅을 또 건드리지 않도록 먼저 끊는다
+  els.topbar.classList.remove('show');
+  els.actionBar.classList.remove('tutorial-hidden');
+  tutorialActive = false;
+  resetAll();
 }

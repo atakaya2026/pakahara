@@ -27,12 +27,9 @@
     white-space: pre-wrap; overflow-y: auto; box-sizing: border-box;
     font-family: 'Noto Sans Devanagari', sans-serif; color: #1a1208; line-height: 1.4;
   }
-  #editor::after {
-    content: "|"; display: inline-block;
-    width: 2px; margin-left: 2px;
-    animation: blink 1s step-end infinite; font-weight: 100;
-  }
-  @keyframes blink { from, to { color: transparent; } 50% { color: black; } }
+  .cursor { color: #1a1208; font-weight: 100; animation: blink 1s step-end infinite; }
+  .pending-space-dot { color: #9a9488; animation: blink 1s step-end infinite; }
+  @keyframes blink { from, to { opacity: 0; } 50% { opacity: 1; } }
 
   .top-btn {
     position: fixed; top: 20px;
@@ -128,8 +125,18 @@ let state = {
 };
 
 const editor = document.getElementById('editor');
-const getText = () => editor.innerText;
-const setText = t => { editor.innerText = t; };
+let rawText = '';
+const getText = () => rawText;
+// 맨 끝 공란은 독립모음이 뒤따르면 대체될 수 있는 미확정 상태라, 실제 공백 대신
+// 회색 점을 깜빡여 보여준다(handleNext에서 실제로 대체됨).
+const setText = t => {
+  rawText = t;
+  const pending = t.endsWith(' ');
+  const body = pending ? t.slice(0, -1) : t;
+  const esc = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const dot = pending ? `<span class="pending-space-dot">•</span>` : '';
+  editor.innerHTML = esc + dot + `<span class="cursor">▏</span>`;
+};
 const appendText = c => setText(getText() + c);
 const replaceLastChar = c => { const t = getText(); if (!t.length) return; setText(t.slice(0,-1)+c); };
 const doBackspace = () => { const t = getText(); if (!t.length) return; setText(t.slice(0,-1)); };
@@ -284,6 +291,8 @@ function resetEditor() {
   setText('');
   state = { activeRoot:null, activeCharIdx:0, lastSignKey:null, signTapIdx:0, signIndepMode:false, independentMode:false };
 }
+
+setText('');
 </script>
 </body>
 </html>
