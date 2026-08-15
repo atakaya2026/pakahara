@@ -44,7 +44,7 @@
   var STAGES = [
     {
       columns: [2, 3, 4, 7, 8, 9],
-      moleCount: 20,
+      moleCount: 40,
       waitMode: 'infinite',
       hideDelayMs: 0,
       title: 'चरण 1',
@@ -52,7 +52,7 @@
     },
     {
       columns: [1, 2, 3, 4, 7, 8, 9, 10],
-      moleCount: 20,
+      moleCount: 40,
       waitMode: 'timeout',
       hideDelayMs: 900,
       passThreshold: 0.8,
@@ -61,7 +61,7 @@
     },
     {
       columns: [4, 5, 6, 7],
-      moleCount: 10,
+      moleCount: 40,
       waitMode: 'timeout',
       hideDelayMs: 900,
       passThreshold: 0.8,
@@ -71,7 +71,7 @@
     },
     {
       columns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-      moleCount: 30,
+      moleCount: 40,
       waitMode: 'timeout',
       hideDelayMs: 900,
       passThreshold: 0.8,
