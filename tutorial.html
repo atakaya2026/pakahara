@@ -244,7 +244,7 @@ const setText = t => {
   const pending = t.endsWith(' ');
   const body = pending ? t.slice(0, -1) : t;
   const esc = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const dot = pending ? `<span class="pending-space-dot">•</span>` : '';
+  const dot = pending ? `<span class="pending-space-dot">_</span>` : '';
   monitorEl.innerHTML = esc + dot + `<span class="cursor"></span>`;
 };
 const appendText = c => setText(getText() + c);
