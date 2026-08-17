@@ -32,9 +32,10 @@ html, body {
 .cursor { color: #4caf80; animation: blink 1s step-end infinite; font-weight: 100; }
 @keyframes blink { from, to { opacity: 0; } 50% { opacity: 1; } }
 
-/* 아직 확정되지 않은 맨 끝 공란 자리 표시자 — 실제 공백 대신 회색 점을 깜빡여
-   "여기 독립 모음이 들어올 수도 있다"는 미확정 상태를 알린다. */
-.pending-space-dot { color: #9a9488; animation: blink 1s step-end infinite; }
+/* 아직 확정되지 않은 맨 끝 공란 자리 표시자 — 실제 InputConnection의 조합 중(composing)
+   텍스트처럼 밑줄로 "여기 아직 확정 안 됐다(독립모음이 뒤따르면 대체될 수 있다)"는 상태를
+   알린다. 커서와 달리 깜빡이지 않는다 — 실제 조합 텍스트 밑줄도 정적이라 깜빡이는 건 커서뿐. */
+.pending-space-underline { border-bottom: 2px solid #9a9488; }
 
 #keyboard-wrap {
   position: relative;
@@ -228,6 +229,10 @@ html, body {
   overflow: hidden;
 }
 #tutorial-demo-box .cursor { font-size: clamp(28px, 11vw, 46px); }
+/* #editor의 white-space:pre-wrap과 같은 이유 — 기본값(normal)이면 .pending-space-underline
+   안의 미확정 공란(공백 한 글자뿐인 텍스트 노드)이 폭 0으로 접혀버려 밑줄이 그려질 자리
+   자체가 없어진다(밑줄 span은 실제로 그려지는데 보이지 않던 원인). */
+#tutorial-demo-text { white-space: pre; }
 
 /* 뒤로가기 버튼: 이미지 속 화살표+"Back" 글자 위에 투명 버튼만 얹어 클릭 영역으로 쓴다 */
 #tutorial-back-btn {

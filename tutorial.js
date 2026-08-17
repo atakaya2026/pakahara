@@ -49,6 +49,10 @@ function q(id) { return document.getElementById(id); }
 const TYPE_DELAY_MS = 40;
 let typeTimer = null;
 
+// 조합을 막 완성한 직후(खी, आ) 다음 단계로 넘어가기 전에 결과를 잠깐 보여주는 시간.
+// advanceZoneStep의 1800ms(숫자판이 뜬 걸 확인시켜주는 지연)와 같은 취지.
+const STEP_TRANSITION_DELAY_MS = 1200;
+
 function typeInto(el, text, onDone) {
   clearTimeout(typeTimer);
   el.textContent = '';
@@ -255,7 +259,10 @@ function revealKeyArrow() {
 }
 
 function checkComposeProgress() {
-  els.demoText.textContent = getText();
+  // renderComposingHtml(keyboard.js)이 #editor와 똑같이 미확정 공란을 밑줄로 그려준다.
+  // 커서는 #tutorial-demo-box의 정적 마크업에 이미 별도 <span class="cursor">로 있으므로
+  // withCursor=false(중복 방지).
+  els.demoText.innerHTML = renderComposingHtml(getText(), false);
   if (tutorialStep === 'kha-cons') {
     if (state.activeRoot === 'क' && state.activeCharIdx === 0) {
       tutorialStep = 'kha-next';
@@ -288,7 +295,10 @@ function checkComposeProgress() {
   } else if (tutorialStep === 'khi-2') {
     if (state.lastSignKey === 'L' && state.signTapIdx === 1) {
       setProgress(3);
-      beginIndependentStep();
+      // 방금 완성한 "खी"를 잠깐 보여준 뒤에 다음 단계로 넘어간다 — 곧장 beginIndependentStep()의
+      // resetAll()로 지워버리면 유저가 자기가 막 완성한 단어를 확인할 새도 없이 사라져버린다.
+      // advanceZoneStep의 1800ms(숫자판 확인용) 패턴과 같은 방식.
+      setTimeout(beginIndependentStep, STEP_TRANSITION_DELAY_MS);
     } else if ((state.lastSignKey && state.lastSignKey !== 'L') || state.activeRoot) {
       shakeBanner();
       tutorialStep = 'khi-1';
@@ -307,7 +317,8 @@ function checkComposeProgress() {
   } else if (tutorialStep === 'indep-vowel') {
     if (state.lastSignKey === 'L' && state.signIndepMode && state.signTapIdx === 0) {
       setProgress(4);
-      beginHalantStep();
+      // 방금 완성한 "आ"도 khi-2와 같은 이유로 잠깐 보여준 뒤 다음 단계로 넘어간다.
+      setTimeout(beginHalantStep, STEP_TRANSITION_DELAY_MS);
     } else if ((state.lastSignKey && !(state.lastSignKey === 'L' && state.signIndepMode)) || state.activeRoot) {
       shakeBanner();
       tutorialStep = 'indep-space';

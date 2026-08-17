@@ -78,6 +78,25 @@ let numericMode = false;
 // 모드에서 실제로 벗어나는 그 순간에만(아직 임시 모드가 아닐 때만) 갱신한다.
 let baseModeIsEnglish = false; // false=힌디, true=영문 소문자
 
+// 실제 InputConnection의 조합 중(composing) 텍스트와 같은 개념 — 아직 "확정"되지 않은 맨 끝
+// 공란(독립모음이 뒤따르면 대체될 수 있음)을 실제 공백 대신 밑줄 친 자리로 보여준다. 표준
+// EditText가 조합 중 텍스트에 밑줄을 그려주는 것과 동일한 관례(안드로이드 앱의
+// InputConnectionTextEditor.setComposingSpace가 실기기에서 만드는 밑줄과 같은 시각 언어).
+// #editor(메인 입력 미리보기)와 튜토리얼의 #tutorial-demo-text가 공유한다.
+function renderComposingHtml(t, withCursor) {
+  // 맨 끝 공란은 힌디 모드에서만 아직 "확정"되지 않은 상태다 — 독립모음이 뒤따르면
+  // 그 모음으로 대체될 수 있어서다(independentActive() 참고). 영문/숫자 모드는
+  // 독립모음 개념이 없어 스페이스가 찍히는 즉시 확정이므로 그냥 보통 공백으로 보여준다.
+  // 이후 뭔가 더 입력되면(그 공란이 더는 마지막 글자가 아니게 되면) 다시 불릴 때 자연히
+  // 보통 공백으로 그려진다 — 별도 "확정" 처리가 필요 없다.
+  const pending = t.endsWith(' ') && !numericMode && !state.engActive;
+  const body = pending ? t.slice(0, -1) : t;
+  const esc = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const underline = pending ? `<span class="pending-space-underline"> </span>` : '';
+  const cursor = withCursor ? `<span class="cursor">▏</span>` : '';
+  return esc + underline + cursor;
+}
+
 // 호스트 페이지가 지정하지 않으면 #editor 엘리먼트를 기본 입력 대상으로 삼는다
 // (mobile_demo.html의 원래 방식). 상용구 편집 화면처럼 여러 입력 대상이 있는
 // 페이지는 KB_setEditorAdapter로 "현재 포커스된 대상"을 갈아 끼운다.
@@ -90,16 +109,7 @@ let editorAdapter = {
     const el = document.getElementById('editor');
     if (!el) return;
     el.dataset.text = t;
-    // 맨 끝 공란은 힌디 모드에서만 아직 "확정"되지 않은 상태다 — 독립모음이 뒤따르면
-    // 그 모음으로 대체될 수 있어서다(independentActive() 참고). 영문/숫자 모드는
-    // 독립모음 개념이 없어 스페이스가 찍히는 즉시 확정이므로 그냥 보통 공백으로 보여준다.
-    // 이후 뭔가 더 입력되면(그 공란이 더는 마지막 글자가 아니게 되면) 이 함수가 다시
-    // 불릴 때 자연히 보통 공백으로 그려진다 — 별도 "확정" 처리가 필요 없다.
-    const pending = t.endsWith(' ') && !numericMode && !state.engActive;
-    const body = pending ? t.slice(0, -1) : t;
-    const esc = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const dot = pending ? `<span class="pending-space-dot">•</span>` : '';
-    el.innerHTML = esc + dot + `<span class="cursor">▏</span>`;
+    el.innerHTML = renderComposingHtml(t, true);
   },
 };
 function KB_setEditorAdapter(adapter) { editorAdapter = adapter; }
